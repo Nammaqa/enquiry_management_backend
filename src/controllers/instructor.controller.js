@@ -466,3 +466,54 @@ exports.updateInstructorProfile = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// Get all instructors (ADMIN and COUNSELLOR only)
+exports.getAllInstructors = async (req, res) => {
+  try {
+    const userRole = req.user.role;
+
+    // Only ADMIN and COUNSELLOR can view all instructors
+    if (userRole !== 'ADMIN' && userRole !== 'COUNSELLOR') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only Admin and Counsellor can view all instructors.',
+      });
+    }
+
+    const instructors = await User.findAll({
+      where: {
+        role: 'instructor',
+      },
+      attributes: ['id', 'name', 'email', 'role', 'createdAt', 'updatedAt'],
+      // include: [
+      //   {
+      //     model: db.Instructor,
+      //     attributes: ['id', 'description', 'image', 'experienceYears'],
+      //     as: 'instructor',
+      //     required: false,
+      //   },
+      //   {
+      //     model: Subject,
+      //     attributes: ['id', 'name', 'code'],
+      //     as: 'subjects',
+      //     through: { attributes: [] },
+      //     required: false,
+      //   },
+      // ],
+      order: [['name', 'ASC']],
+    });
+
+    res.status(200).json({
+      success: true,
+      total: instructors.length,
+      message: 'All instructors retrieved successfully',
+      data: instructors,
+    });
+  } catch (error) {
+    console.error('Error in getAllInstructors:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

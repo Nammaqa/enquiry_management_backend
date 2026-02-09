@@ -11,6 +11,13 @@ router.post(
   instructorController.assignSubjectToInstructor
 );
 
+// Get all instructors (ADMIN and COUNSELLOR only)
+router.get(
+  '/list/all',
+  auth,
+  instructorController.getAllInstructors
+);
+
 // Get all subjects for instructor (accessible by instructor, admin, and counsellor)
 router.get(
   '/my-subjects',

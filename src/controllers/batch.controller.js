@@ -2,11 +2,28 @@ const db = require('../models');
 const User = db.User;
 const Batch = db.Batch;
 const QRCode = require('qrcode');
+const { Formidable } = require('formidable');
 
 // Create Batch
 exports.createBatch = async (req, res) => {
+  const form = new Formidable({ multiples: false, maxFileSize: 50 * 1024 * 1024, keepExtensions: true });
+  
   try {
-    const { name, code, sessionDate, sessionEndDate, sessionTime, sessionLink, sessionQr, status, numberOfStudents, approvalStatus: reqApprovalStatus, subjectId } = req.body;
+    const [fields, files] = await form.parse(req);
+    
+    // Extract fields from formidable
+    const name = fields.name ? fields.name[0] : null;
+    const code = fields.code ? fields.code[0] : null;
+    const sessionDate = fields.sessionDate ? fields.sessionDate[0] : null;
+    const sessionEndDate = fields.sessionEndDate ? fields.sessionEndDate[0] : null;
+    const sessionTime = fields.sessionTime ? fields.sessionTime[0] : null;
+    const sessionLink = fields.sessionLink ? fields.sessionLink[0] : null;
+    const sessionQr = fields.sessionQr ? fields.sessionQr[0] : null;
+    const status = fields.status ? fields.status[0] : null;
+    const numberOfStudents = fields.numberOfStudents ? parseInt(fields.numberOfStudents[0]) : 0;
+    const subjectId = fields.subjectId ? parseInt(fields.subjectId[0]) : null;
+    const imageFile = files.image ? files.image[0] : null;
+    
     const userId = req.user.id;  // From authenticated User
     const userRole = req.user.role;  // Role validation
 
@@ -20,21 +37,22 @@ exports.createBatch = async (req, res) => {
 
     console.log('Create batch request:', { name, code, subjectId, userRole, userId });
 
-    if (!name || !code || !sessionDate || !sessionTime || !subjectId) {
+    if (!name || !code || !sessionDate || !sessionTime) {
       return res.status(400).json({
-        message: 'name, code, sessionDate, sessionTime, and subjectId are required',
+        message: 'name, code, sessionDate, and sessionTime are required',
       });
     }
 
-    // Check if subject exists - MANDATORY
-    const subject = await db.Subject.findByPk(subjectId);
-    if (!subject) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot create batch. The specified subject does not exist. Please create or select a valid subject first.',
-      });
+    // Check if subject exists - OPTIONAL
+    if (subjectId) {
+      const subject = await db.Subject.findByPk(subjectId);
+      if (!subject) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot create batch. The specified subject does not exist. Please create or select a valid subject first.',
+        });
+      }
     }
-
 
     // Set approval status based on user role
     // Admin/Counsellor: always approved, cannot be overridden by request
@@ -58,7 +76,7 @@ exports.createBatch = async (req, res) => {
       numberOfStudents: numberOfStudents || 0,
       approvalStatus,
       createdBy: userId,
-      subjectId,
+      subjectId: subjectId || null,
     });
 
     // Generate QR code with batch ID and store as base64
@@ -248,9 +266,25 @@ exports.getBatchById = async (req, res) => {
 
 // Update Batch (instructor updates go to pending, admin/counsellor can update freely)
 exports.updateBatch = async (req, res) => {
+  const form = new Formidable({ multiples: false, maxFileSize: 50 * 1024 * 1024, keepExtensions: true });
+  
   try {
+    const [fields, files] = await form.parse(req);
     const { batchId } = req.params;
-    const { name, code, sessionDate, sessionEndDate, sessionTime, sessionLink, sessionQr, status, numberOfStudents, approvalStatus: reqApprovalStatus, subjectId } = req.body;
+    
+    // Extract fields from formidable
+    const name = fields.name ? fields.name[0] : null;
+    const code = fields.code ? fields.code[0] : null;
+    const sessionDate = fields.sessionDate ? fields.sessionDate[0] : null;
+    const sessionEndDate = fields.sessionEndDate ? fields.sessionEndDate[0] : null;
+    const sessionTime = fields.sessionTime ? fields.sessionTime[0] : null;
+    const sessionLink = fields.sessionLink ? fields.sessionLink[0] : null;
+    const status = fields.status ? fields.status[0] : null;
+    const numberOfStudents = fields.numberOfStudents ? parseInt(fields.numberOfStudents[0]) : null;
+    const subjectId = fields.subjectId ? parseInt(fields.subjectId[0]) : null;
+    const approvalStatus = fields.approvalStatus ? fields.approvalStatus[0] : null;
+    const imageFile = files.image ? files.image[0] : null;
+    
     const userId = req.user.id;
     const userRole = req.user.role;
 
@@ -283,8 +317,8 @@ exports.updateBatch = async (req, res) => {
     // ANY instructor update requires approval
     if (userRole === 'instructor') {
       batch.approvalStatus = 'pending';
-    } else if (reqApprovalStatus && (userRole === 'ADMIN' || userRole === 'COUNSELLOR')) {
-      batch.approvalStatus = reqApprovalStatus;
+    } else if (approvalStatus && (userRole === 'ADMIN' || userRole === 'COUNSELLOR')) {
+      batch.approvalStatus = approvalStatus;
     }
 
     await batch.save();

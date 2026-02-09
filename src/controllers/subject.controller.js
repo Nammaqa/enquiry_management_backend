@@ -46,6 +46,7 @@ exports.createSubject = async (req, res) => {
     const overview = fields.overview ? fields.overview[0] : null;
     const syllabus = fields.syllabus ? fields.syllabus[0] : null;
     const prerequisites = fields.prerequisites ? fields.prerequisites[0] : null;
+  
 
     if (!name || !code) {
       return res.status(400).json({
