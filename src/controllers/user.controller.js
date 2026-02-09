@@ -102,3 +102,23 @@ exports.deleteUser = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
+exports.getInstructors = async (req, res) => {
+    try {
+        const instructors = await User.findAll({
+            where: { role: 'INSTRUCTOR' },
+            attributes: ['id', 'name', 'email', 'role', 'createdAt'],
+            order: [['name', 'ASC']]
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Instructors retrieved successfully',
+            total: instructors.length,
+            data: instructors,
+        });
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: 'Failed to fetch instructors' });
+    }
+};

@@ -10,6 +10,20 @@ router.post(
   assignmentController.createAssignment
 );
 
+// Create Assignment by Instructor for their associated batch
+router.post(
+  '/instructor/create',
+  auth,
+  assignmentController.createInstructorAssignment
+);
+
+// Get all assignments for the logged-in instructor's associated batch
+router.get(
+  '/instructor/assignments/:batchId',
+  auth,
+  assignmentController.getInstructorAssignments
+);
+
 // Get Batches by Instructor ID and Subject ID
 router.get(
   '/batches-by-instructor-subject',

@@ -24,6 +24,20 @@ router.get(
   batchController.getBatches
 );
 
+// Get batches by subject ID for the logged-in instructor (instructor ID from token)
+router.get(
+  '/subject/:subjectId',
+  auth,
+  batchController.getBatchesBySubject
+);
+
+// Get all subjects for the logged-in instructor
+router.get(
+  '/instructor/subjects',
+  auth,
+  batchController.getInstructorSubjects
+);
+
 // Get batch by ID
 router.get(
   '/:batchId',

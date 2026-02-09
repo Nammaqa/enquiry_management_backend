@@ -28,7 +28,7 @@ exports.createBatch = async (req, res) => {
     const userRole = req.user.role;  // Role validation
 
     // Only ADMIN, COUNSELLOR, and INSTRUCTOR can create batches
-    if (userRole !== 'ADMIN' && userRole !== 'COUNSELLOR' && userRole !== 'instructor') {
+    if (userRole !== 'ADMIN' && userRole !== 'COUNSELLOR' && userRole !== 'INSTRUCTOR') {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only Admin, Counsellor, and Instructor can create batches.',
@@ -90,6 +90,29 @@ exports.createBatch = async (req, res) => {
       // Continue without QR code if generation fails
     }
 
+    // Create association between instructor and subject in InstructorSubject table
+    if (instructorId && subjectId) {
+      try {
+        // Check if association already exists
+        const existingAssociation = await db.InstructorSubject.findOne({
+          where: { instructorId, subjectId }
+        });
+
+        if (!existingAssociation) {
+          await db.InstructorSubject.create({
+            instructorId,
+            subjectId
+          });
+          console.log('InstructorSubject association created:', { instructorId, subjectId });
+        } else {
+          console.log('InstructorSubject association already exists:', { instructorId, subjectId });
+        }
+      } catch (assocError) {
+        console.error('Error creating InstructorSubject association:', assocError);
+        // Continue without association if creation fails
+      }
+    }
+
     console.log('Batch created:', batch?.dataValues);
 
     res.status(201).json({
@@ -115,7 +138,7 @@ exports.getAvailableBatches = async (req, res) => {
     const userRole = req.user.role;
 
     // Only instructors can view available batches
-    if (userRole !== 'instructor') {
+    if (userRole !== 'INSTRUCTOR') {
       return res.status(403).json({ message: 'Only instructors can view available batches' });
     }
 
@@ -161,7 +184,7 @@ exports.getBatches = async (req, res) => {
     let batches;
 
     // Instructors can only see their own batches and approved batches
-    if (userRole === 'instructor') {
+    if (userRole === 'INSTRUCTOR') {
       batches = await Batch.findAll({
         where: {
           [db.Sequelize.Op.or]: [
@@ -253,7 +276,7 @@ exports.getBatchById = async (req, res) => {
     // Instructors can view:
     // 1. Their own batches (any status)
     // 2. Approved batches (created by anyone)
-    if (userRole === 'instructor') {
+    if (userRole === 'INSTRUCTOR') {
       if (batch.createdBy !== userId && batch.approvalStatus !== 'approved') {
         return res.status(403).json({ message: 'Access denied' });
       }
@@ -301,7 +324,7 @@ exports.updateBatch = async (req, res) => {
     }
 
     // Instructors can only update their own batches or approved batches created by admin/counsellor
-    if (userRole === 'instructor') {
+    if (userRole === 'INSTRUCTOR') {
       if (batch.createdBy !== userId && batch.approvalStatus !== 'approved') {
         return res.status(403).json({ 
           message: 'Access denied. Only approved batches can be updated by other instructors' 
@@ -322,7 +345,7 @@ exports.updateBatch = async (req, res) => {
     if (instructorId !== undefined) batch.instructorId = instructorId;
 
     // ANY instructor update requires approval
-    if (userRole === 'instructor') {
+    if (userRole === 'INSTRUCTOR') {
       batch.approvalStatus = 'pending';
     } else if (approvalStatus && (userRole === 'ADMIN' || userRole === 'COUNSELLOR')) {
       batch.approvalStatus = approvalStatus;
@@ -340,11 +363,34 @@ exports.updateBatch = async (req, res) => {
       // Continue without QR code if generation fails
     }
 
+    // Update association between instructor and subject in InstructorSubject table
+    if (instructorId !== undefined && subjectId !== undefined && instructorId && subjectId) {
+      try {
+        // Check if association already exists
+        const existingAssociation = await db.InstructorSubject.findOne({
+          where: { instructorId, subjectId }
+        });
+
+        if (!existingAssociation) {
+          await db.InstructorSubject.create({
+            instructorId,
+            subjectId
+          });
+          console.log('InstructorSubject association created:', { instructorId, subjectId });
+        } else {
+          console.log('InstructorSubject association already exists:', { instructorId, subjectId });
+        }
+      } catch (assocError) {
+        console.error('Error updating InstructorSubject association:', assocError);
+        // Continue without association if creation fails
+      }
+    }
+
     console.log('Batch updated:', batch?.dataValues);
 
     res.status(200).json({
       success: true,
-      message: userRole === 'instructor' 
+      message: userRole === 'INSTRUCTOR' 
         ? 'Batch updated and sent for approval' 
         : 'Batch updated successfully',
       data: batch,
@@ -388,6 +434,92 @@ exports.updateApprovalStatus = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in updateApprovalStatus:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get batches by subject ID for the logged-in instructor
+exports.getBatchesBySubject = async (req, res) => {
+  try {
+    console.log('getBatchesBySubject called with user:', req.user);
+    const instructorId = req.user.userId; // from token
+    const { subjectId } = req.params; // from URL
+
+    if (!subjectId) {
+      return res.status(400).json({ success: false, message: 'subjectId is required' });
+    }
+
+    const batches = await Batch.findAll({
+      where: {
+        subjectId: parseInt(subjectId),
+        instructorId,
+      },
+      attributes: { include: ['sessionQr'] },
+      include: [
+        {
+          model: db.User,
+          attributes: ['id', 'name', 'email'],
+          foreignKey: 'createdBy',
+          as: 'creator',
+        },
+        {
+          model: db.Subject,
+          attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate'],
+          foreignKey: 'subjectId',
+          as: 'subject',
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    // Also fetch all subjects assigned to this instructor
+    const instructorSubjects = await db.Subject.findAll({
+      include: [{
+        model: db.User,
+        as: 'instructors',
+        where: { id: instructorId },
+        attributes: [],
+      }],
+      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate'],
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Batches for subject ${subjectId} assigned to instructor`,
+      totalBatches: batches.length,
+      totalSubjects: instructorSubjects.length,
+      batches,
+      instructorSubjects,
+    });
+  } catch (error) {
+    console.error('Error in getBatchesBySubject:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get all subjects for the logged-in instructor
+exports.getInstructorSubjects = async (req, res) => {
+  try {
+    const instructorId = req.user.id; // from token
+
+    const subjects = await db.Subject.findAll({
+      include: [{
+        model: db.User,
+        as: 'instructors',
+        where: { id: instructorId },
+        attributes: [],
+      }],
+      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate'],
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Subjects assigned to instructor',
+      total: subjects.length,
+      data: subjects,
+    });
+  } catch (error) {
+    console.error('Error in getInstructorSubjects:', error);
     res.status(500).json({ message: error.message });
   }
 };

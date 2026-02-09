@@ -97,6 +97,181 @@ exports.createAssignment = async (req, res) => {
   }
 };
 
+// Create Assignment by Instructor for their associated batch
+exports.createInstructorAssignment = async (req, res) => {
+  const form = new Formidable({ multiples: false, maxFileSize: 10 * 1024 * 1024, keepExtensions: true });
+
+  try {
+    const [fields, files] = await form.parse(req);
+    const batchId = fields.batchId ? fields.batchId[0] : (fields.courseId ? fields.courseId[0] : null);
+    const title = fields.title ? fields.title[0] : null;
+    const description = fields.description ? fields.description[0] : null;
+    const dueDate = fields.dueDate ? fields.dueDate[0] : null;
+    const instructorId = req.user.id; // from token
+
+    if (!batchId || !title || !dueDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'batchId (or courseId), title, and dueDate are required',
+      });
+    }
+
+    // Get batch and verify instructor is assigned to it
+    const batch = await Batch.findByPk(batchId, {
+      include: [
+        {
+          model: Subject,
+          attributes: ['id', 'name', 'code'],
+          as: 'subject',
+        },
+      ],
+    });
+
+    if (!batch) {
+      return res.status(404).json({ success: false, message: 'Batch not found' });
+    }
+
+    // Instructor must be the assigned instructor for this batch
+    if (batch.instructorId !== instructorId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You are not the assigned instructor for this batch.',
+      });
+    }
+
+    if (!batch.subjectId) {
+      return res.status(400).json({
+        success: false,
+        message: 'This batch has no associated subject. Cannot create assignment.',
+      });
+    }
+
+    // Check if assignment with same title already exists for this batch
+    const existingAssignment = await Assignment.findOne({
+      where: { title, batchId },
+    });
+
+    if (existingAssignment) {
+      return res.status(409).json({
+        success: false,
+        message: 'An assignment with this title already exists for this batch.',
+        data: existingAssignment,
+      });
+    }
+
+    let assignmentFile = null;
+
+    // Handle file upload if provided
+    if (files.assignmentFile && files.assignmentFile[0]) {
+      const file = files.assignmentFile[0];
+      const fileBuffer = await fs.readFile(file.filepath);
+      const uniqueName = `assignment-${batchId}-${Date.now()}`;
+
+      try {
+        const uploadResult = await uploadImage(fileBuffer, uniqueName);
+        assignmentFile = uploadResult.secure_url;
+      } catch (uploadError) {
+        console.error('Cloudinary upload error:', uploadError);
+        return res.status(400).json({
+          message: 'Failed to upload assignment file',
+          error: uploadError.message,
+        });
+      } finally {
+        await fs.unlink(file.filepath).catch(() => {});
+      }
+    }
+
+    const assignment = await Assignment.create({
+      title,
+      description: description || null,
+      dueDate,
+      batchId,
+      subjectId: batch.subjectId,
+      createdBy: instructorId,
+      assignmentFile,
+    });
+
+    console.log('Instructor assignment created:', assignment?.dataValues);
+
+    res.status(201).json({
+      success: true,
+      message: 'Assignment created successfully',
+      data: assignment,
+    });
+  } catch (error) {
+    console.error('Error in createInstructorAssignment:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Get all assignments for the logged-in instructor by batch ID
+exports.getInstructorAssignments = async (req, res) => {
+  try {
+    const instructorId = req.user.id; // from token
+    const { batchId } = req.params; // from URL
+
+    if (!batchId) {
+      return res.status(400).json({ success: false, message: 'batchId is required' });
+    }
+
+    // Verify the batch exists and belongs to this instructor
+    const batch = await Batch.findOne({
+      where: { id: parseInt(batchId), instructorId },
+      include: [
+        {
+          model: Subject,
+          attributes: ['id', 'name', 'code', 'image'],
+          as: 'subject',
+        },
+      ],
+    });
+
+    if (!batch) {
+      return res.status(404).json({
+        success: false,
+        message: 'Batch not found or you are not the assigned instructor for this batch.',
+      });
+    }
+
+    // Get assignments for this batch
+    const assignments = await Assignment.findAll({
+      where: { batchId: parseInt(batchId) },
+      include: [
+        {
+          model: Batch,
+          attributes: ['id', 'name', 'code', 'sessionDate', 'sessionTime', 'instructorId', 'subjectId'],
+          as: 'batch',
+        },
+        {
+          model: Subject,
+          attributes: ['id', 'name', 'code', 'image'],
+          as: 'subject',
+        },
+        {
+          model: User,
+          attributes: ['id', 'name', 'email'],
+          foreignKey: 'createdBy',
+          as: 'instructor',
+        },
+      ],
+      order: [['createdDate', 'DESC']],
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Instructor assignments retrieved successfully',
+      total: assignments.length,
+      batchName: batch.name,
+      batchCode: batch.code,
+      subject: batch.subject,
+      data: assignments,
+    });
+  } catch (error) {
+    console.error('Error in getInstructorAssignments:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // Get Batches by Instructor ID and Subject ID
 exports.getBatchesByInstructorAndSubject = async (req, res) => {
   try {

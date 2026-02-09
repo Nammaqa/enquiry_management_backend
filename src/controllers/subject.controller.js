@@ -111,6 +111,69 @@ exports.getAllSubjects = async (req, res) => {
 };
 
 /**
+ * GET subjects by instructor ID from token (ALL ROLES)
+ */
+exports.getSubjectsByInstructor = async (req, res) => {
+  try {console.log('getSubjectsByInstructor called with user:', req.user);
+    const instructorId = req.user.userId;
+    const db = require('../models');
+    const { InstructorSubject, Subject, Package: PackageModel } = db;
+
+    console.log('Fetching subjects for instructorId:', instructorId);
+    console.log('InstructorSubject model exists:', !!InstructorSubject);
+
+    // Find all instructor-subject associations for this instructor
+    const instructorSubjects = await InstructorSubject.findAll({
+      where: { instructorId: instructorId },
+      attributes: ['subjectId'],
+      raw: true,
+    });
+
+    console.log('InstructorSubjects found:', instructorSubjects);
+
+    if (instructorSubjects.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No subjects found for this instructor',
+        data: [],
+      });
+    }
+
+    // Extract subject IDs
+    const subjectIds = instructorSubjects.map(item => item.subjectId);
+    console.log('Subject IDs:', subjectIds);
+
+    // Find all subjects with those IDs
+    const subjects = await Subject.findAll({
+      where: { id: subjectIds },
+      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'createdAt', 'updatedAt'],
+      include: [
+        {
+          model: PackageModel,
+          attributes: ['id', 'name', 'code'],
+          through: { attributes: [] },
+        },
+      ],
+    });
+
+    console.log('Subjects found:', subjects.length);
+
+    res.status(200).json({
+      success: true,
+      message: 'Subjects retrieved successfully',
+      total: subjects.length,
+      data: subjects,
+    });
+  } catch (error) {
+    console.error('Error in getSubjectsByInstructor:', error);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: error.message 
+    });
+  }
+};
+
+/**
  * GET subject by ID (ALL ROLES)
  */
 exports.getSubjectById = async (req, res) => {
