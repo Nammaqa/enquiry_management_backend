@@ -18,10 +18,10 @@ exports.createBatch = async (req, res) => {
     const sessionEndDate = fields.sessionEndDate ? fields.sessionEndDate[0] : null;
     const sessionTime = fields.sessionTime ? fields.sessionTime[0] : null;
     const sessionLink = fields.sessionLink ? fields.sessionLink[0] : null;
-    const sessionQr = fields.sessionQr ? fields.sessionQr[0] : null;
     const status = fields.status ? fields.status[0] : null;
     const numberOfStudents = fields.numberOfStudents ? parseInt(fields.numberOfStudents[0]) : 0;
     const subjectId = fields.subjectId ? parseInt(fields.subjectId[0]) : null;
+    const instructorId = fields.instructorId ? parseInt(fields.instructorId[0]) : null;
     const imageFile = files.image ? files.image[0] : null;
     
     const userId = req.user.id;  // From authenticated User
@@ -76,6 +76,7 @@ exports.createBatch = async (req, res) => {
       numberOfStudents: numberOfStudents || 0,
       approvalStatus,
       createdBy: userId,
+      instructorId: instructorId || null,
       subjectId: subjectId || null,
     });
 
@@ -122,6 +123,7 @@ exports.getAvailableBatches = async (req, res) => {
       where: {
         approvalStatus: 'approved',
       },
+      attributes: { include: ['sessionQr'] },
       include: [
         {
           model: db.User,
@@ -167,6 +169,7 @@ exports.getBatches = async (req, res) => {
             { approvalStatus: 'approved' }, // approved batches
           ],
         },
+        attributes: { include: ['sessionQr'] },
         include: [
           {
             model: db.User,
@@ -186,6 +189,7 @@ exports.getBatches = async (req, res) => {
     } else if (userRole === 'ADMIN' || userRole === 'COUNSELLOR') {
       // Admin/Counsellor can see all batches
       batches = await Batch.findAll({
+        attributes: { include: ['sessionQr'] },
         include: [
           {
             model: db.User,
@@ -225,6 +229,7 @@ exports.getBatchById = async (req, res) => {
     const userRole = req.user.role;
 
     const batch = await Batch.findByPk(batchId, {
+      attributes: { include: ['sessionQr'] },
       include: [
         {
           model: db.User,
@@ -282,6 +287,7 @@ exports.updateBatch = async (req, res) => {
     const status = fields.status ? fields.status[0] : null;
     const numberOfStudents = fields.numberOfStudents ? parseInt(fields.numberOfStudents[0]) : null;
     const subjectId = fields.subjectId ? parseInt(fields.subjectId[0]) : null;
+    const instructorId = fields.instructorId ? parseInt(fields.instructorId[0]) : null;
     const approvalStatus = fields.approvalStatus ? fields.approvalStatus[0] : null;
     const imageFile = files.image ? files.image[0] : null;
     
@@ -313,6 +319,7 @@ exports.updateBatch = async (req, res) => {
     if (numberOfStudents !== undefined) batch.numberOfStudents = numberOfStudents;
     if (sessionLink) batch.sessionLink = sessionLink;
     if (subjectId) batch.subjectId = subjectId;
+    if (instructorId !== undefined) batch.instructorId = instructorId;
 
     // ANY instructor update requires approval
     if (userRole === 'instructor') {
