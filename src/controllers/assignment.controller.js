@@ -6,7 +6,7 @@ const User = db.User;
 const { Formidable } = require('formidable');
 const fs = require('fs').promises;
 const path = require('path');
-const uploadImage = require('../utils/cloudinary');
+const { uploadImage } = require('../utils/cloudinary');
 
 // Create Assignment for a Batch
 exports.createAssignment = async (req, res) => {
@@ -107,7 +107,7 @@ exports.createInstructorAssignment = async (req, res) => {
     const title = fields.title ? fields.title[0] : null;
     const description = fields.description ? fields.description[0] : null;
     const dueDate = fields.dueDate ? fields.dueDate[0] : null;
-    const instructorId = req.user.id; // from token
+    const instructorId = req.user.userId; // from token
 
     if (!batchId || !title || !dueDate) {
       return res.status(400).json({
@@ -130,7 +130,7 @@ exports.createInstructorAssignment = async (req, res) => {
     if (!batch) {
       return res.status(404).json({ success: false, message: 'Batch not found' });
     }
-
+console.log('Batch found for assignment creation:', batch.instructorId, 'Instructor ID from token:', instructorId);
     // Instructor must be the assigned instructor for this batch
     if (batch.instructorId !== instructorId) {
       return res.status(403).json({
@@ -207,7 +207,7 @@ exports.createInstructorAssignment = async (req, res) => {
 // Get all assignments for the logged-in instructor by batch ID
 exports.getInstructorAssignments = async (req, res) => {
   try {
-    const instructorId = req.user.id; // from token
+    const instructorId = req.user.userId; // from token
     const { batchId } = req.params; // from URL
 
     if (!batchId) {

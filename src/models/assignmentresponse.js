@@ -12,11 +12,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         references: { model: 'batches', key: 'id' },
       },
-      enquiryId: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: { model: 'enquiries', key: 'id' },
-      },
+      // enquiryId removed: assignment responses are now batch-based only
       submittedOn: {
         type: DataTypes.DATE,
         allowNull: true,

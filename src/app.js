@@ -3,7 +3,7 @@ const cors = require('cors');
 const app = express();
 
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174','https://enquiry-node.vercel.app'],
+  origin: ['http://localhost:5173', 'http://localhost:5174','https://enquiry-node.vercel.app','*'],
   credentials: true
 }));
 

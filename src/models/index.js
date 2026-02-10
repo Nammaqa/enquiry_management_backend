@@ -231,27 +231,9 @@ db.Assignment.belongsTo(db.User, {
 	as: 'instructor',
 });
 
-// ONE-TO-MANY: Enquiry can have many Assignments (for candidates in 'class' status)
-db.Enquiry.hasMany(db.Assignment, {
-	foreignKey: 'enquiryId',
-	onDelete: 'CASCADE',
-	as: 'assignments',
-});
-db.Assignment.belongsTo(db.Enquiry, {
-	foreignKey: 'enquiryId',
-	as: 'enquiry',
-});
+// Assignment is not associated with Enquiry (batch-based only)
 
-// ONE-TO-MANY: User (Reviewer) reviews many Assignments
-db.User.hasMany(db.Assignment, {
-	foreignKey: 'reviewedBy',
-	onDelete: 'SET NULL',
-	as: 'reviewedAssignments',
-});
-db.Assignment.belongsTo(db.User, {
-	foreignKey: 'reviewedBy',
-	as: 'reviewer',
-});
+// Assignment is not reviewed by a user (no reviewedBy association)
 
 // ONE-TO-MANY: Batch has many Mock Interviews
 db.Batch.hasMany(db.MockInterview, {
