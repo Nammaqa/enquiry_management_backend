@@ -319,3 +319,74 @@ exports.updateInstructorAssignment = async (req, res) => {
   }
 };
 
+// Delete Assignment by Instructor
+exports.deleteInstructorAssignment = async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const instructorId = req.user.userId; // from token
+
+    if (!assignmentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'assignmentId is required',
+      });
+    }
+
+    // Find the assignment
+    const assignment = await Assignment.findByPk(assignmentId, {
+      include: [
+        {
+          model: Batch,
+          attributes: ['id', 'name', 'code', 'instructorId'],
+          as: 'batch',
+        },
+      ],
+    });
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Assignment not found'
+      });
+    }
+
+    // Verify the instructor owns this assignment
+    if (assignment.createdBy !== instructorId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You are not the creator of this assignment.',
+      });
+    }
+
+    // Verify the instructor is still assigned to the batch
+    if (assignment.batch.instructorId !== instructorId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You are not the assigned instructor for this batch.',
+      });
+    }
+
+    // Store assignment details before deletion for response
+    const deletedAssignmentInfo = {
+      id: assignment.id,
+      title: assignment.title,
+      batchId: assignment.batchId,
+      batchName: assignment.batch.name,
+    };
+
+    // Delete the assignment
+    await assignment.destroy();
+
+    console.log('Assignment deleted:', deletedAssignmentInfo);
+
+    res.status(200).json({
+      success: true,
+      message: 'Assignment deleted successfully',
+      data: deletedAssignmentInfo,
+    });
+  } catch (error) {
+    console.error('Error in deleteInstructorAssignment:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+

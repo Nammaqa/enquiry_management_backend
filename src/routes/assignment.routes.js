@@ -25,4 +25,11 @@ router.put(
   assignmentController.updateInstructorAssignment
 );
 
+// Delete Assignment by Instructor
+router.delete(
+  '/instructor/delete/:assignmentId',
+  auth,
+  assignmentController.deleteInstructorAssignment
+);
+
 module.exports = router;
