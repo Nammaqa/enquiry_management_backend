@@ -1,328 +1,187 @@
 const db = require('../models');
-const { sendResponse } = require('../utils/response');
+const Material = db.Material;
+const Batch = db.Batch;
+const Subject = db.Subject;
+const User = db.User;
 const { Formidable } = require('formidable');
-const fs = require('fs');
+const fs = require('fs').promises;
+const path = require('path');
 const { uploadImage } = require('../utils/cloudinary');
 
-// Create a new material
-exports.createMaterial = async (req, res) => {
+// Create Material by Instructor for their associated batch
+exports.createInstructorMaterial = async (req, res) => {
+  const form = new Formidable({ multiples: false, maxFileSize: 50 * 1024 * 1024, keepExtensions: true });
+
   try {
-    // Parse form data using formidable
-    const form = new Formidable({
-      multiples: false,
-      maxFileSize: 50 * 1024 * 1024, // 50MB limit for documents
-      keepExtensions: true
+    const [fields, files] = await form.parse(req);
+    const batchId = fields.batchId ? fields.batchId[0] : (fields.courseId ? fields.courseId[0] : null);
+    // Title is optional, if not provided we'll use the filename later
+    let title = fields.title ? fields.title[0] : null;
+    const description = fields.description ? fields.description[0] : null;
+    const instructorId = req.user.userId; // from token
+
+    if (!batchId) {
+      return res.status(400).json({
+        success: false,
+        message: 'batchId (or courseId) is required',
+      });
+    }
+
+    // Check for file in 'file' (from frontend) or 'document' (legacy/postman)
+    const uploadedFile = files.file ? files.file[0] : (files.document ? files.document[0] : null);
+
+    if (!uploadedFile) {
+      return res.status(400).json({
+        success: false,
+        message: 'File is required',
+      });
+    }
+
+    // Get batch and verify instructor is assigned to it
+    const batch = await Batch.findByPk(batchId, {
+      include: [
+        {
+          model: Subject,
+          attributes: ['id', 'name', 'code'],
+          as: 'subject',
+        },
+      ],
     });
 
-    const [fields, files] = await form.parse(req);
-
-    // Extract field values
-    const title = fields.title ? fields.title[0] : null;
-    const description = fields.description ? fields.description[0] : null;
-    const subjectId = fields.subjectId ? fields.subjectId[0] : null;
-    const batchId = fields.batchId ? fields.batchId[0] : null;
-    const instructorId = fields.instructorId ? fields.instructorId[0] : null;
-
-    // Validate required fields
-    if (!title || !subjectId || !batchId || !instructorId) {
-      return sendResponse(res, 400, false, 'Title, subject, batch, and instructor are required');
-    }
-
-    // Check if file was uploaded
-    if (!files.document || files.document.length === 0) {
-      return sendResponse(res, 400, false, 'Document file is required');
-    }
-
-    // Check if subject exists
-    const subject = await db.Subject.findByPk(subjectId);
-    if (!subject) {
-      return sendResponse(res, 404, false, 'Subject not found');
-    }
-
-    // Check if batch exists
-    const batch = await db.Batch.findByPk(batchId);
     if (!batch) {
-      return sendResponse(res, 404, false, 'Batch not found');
+      return res.status(404).json({ success: false, message: 'Batch not found' });
     }
 
-    // Check if instructor exists and is a valid user
-    const instructor = await db.User.findByPk(instructorId);
-
-    if (!instructor) {
-      return sendResponse(res, 404, false, 'Instructor not found');
+    // Instructor must be the assigned instructor for this batch
+    if (batch.instructorId !== instructorId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You are not the assigned instructor for this batch.',
+      });
     }
 
-    // Upload document to cloudinary
+    if (!batch.subjectId) {
+      return res.status(400).json({
+        success: false,
+        message: 'This batch has no associated subject. Cannot create material.',
+      });
+    }
+
     let documentUrl = null;
-    const documentFile = files.document[0];
-    const fileBuffer = await fs.promises.readFile(documentFile.filepath);
-    const uploadResult = await uploadImage(fileBuffer, `material-${instructorId}-${Date.now()}`);
-    documentUrl = uploadResult.secure_url;
-    await fs.promises.unlink(documentFile.filepath).catch(() => {});
+    let documentName = null;
 
-    // Create material
-    const material = await db.Material.create({
+    // Handle file upload
+    const file = uploadedFile;
+    const fileBuffer = await fs.readFile(file.filepath);
+    const uniqueName = `material-${batchId}-${Date.now()}`;
+
+    // If title is missing, use the original filename
+    if (!title) {
+      title = file.originalFilename || file.newFilename || 'Untitled Material';
+    }
+
+    try {
+      const uploadResult = await uploadImage(fileBuffer, uniqueName);
+      documentUrl = uploadResult.secure_url;
+      documentName = file.originalFilename || file.newFilename;
+    } catch (uploadError) {
+      console.error('Cloudinary upload error:', uploadError);
+      return res.status(400).json({
+        message: 'Failed to upload material document',
+        error: uploadError.message,
+      });
+    } finally {
+      await fs.unlink(file.filepath).catch(() => { });
+    }
+
+    const material = await Material.create({
       title,
-      description,
-      subjectId,
+      description: description || null,
       batchId,
+      subjectId: batch.subjectId,
       instructorId,
-      documentUrl: documentUrl,
-      documentName: documentFile.originalFilename || documentFile.filename,
+      documentUrl,
+      documentName,
       uploadedOn: new Date(),
     });
 
-    // Fetch material with associations
-    const materialWithAssociations = await db.Material.findByPk(material.id, {
-      include: [
-        { model: db.Subject, as: 'subject' },
-        { model: db.Batch, as: 'batch' },
-        { model: db.User, as: 'instructor' },
-      ],
-    });
+    console.log('Instructor material created:', material?.dataValues);
 
-    return sendResponse(res, 201, true, 'Material created successfully', materialWithAssociations);
+    res.status(201).json({
+      success: true,
+      message: 'Material created successfully',
+      data: material,
+    });
   } catch (error) {
-    console.error('Error creating material:', error);
-    return sendResponse(res, 500, false, 'Error creating material', error.message);
+    console.error('Error in createInstructorMaterial:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Get all materials
-exports.getAllMaterials = async (req, res) => {
+// Get all materials for the logged-in instructor's associated batch
+exports.getInstructorMaterials = async (req, res) => {
   try {
-    const materials = await db.Material.findAll({
-      include: [
-        { model: db.Subject, as: 'subject' },
-        { model: db.Batch, as: 'batch', include: [{ model: db.Subject, as: 'subject' }] },
-        { model: db.User, as: 'instructor' },
-      ],
-      order: [['uploadedOn', 'DESC']],
-    });
+    const instructorId = req.user.userId; // from token
+    const { batchId } = req.params; // from URL
 
-    return sendResponse(res, 200, true, 'Materials retrieved successfully', materials);
-  } catch (error) {
-    console.error('Error retrieving materials:', error);
-    return sendResponse(res, 500, false, 'Error retrieving materials', error.message);
-  }
-};
-
-// Get materials by instructor for their batch(es)
-exports.getMaterialsByInstructor = async (req, res) => {
-  try {
-    const { instructorId } = req.params;
-
-    // Check if instructor exists
-    const instructor = await db.User.findByPk(instructorId);
-    if (!instructor) {
-      return sendResponse(res, 404, false, 'Instructor not found');
+    if (!batchId) {
+      return res.status(400).json({ success: false, message: 'batchId is required' });
     }
 
-    // Get all materials created by this instructor
-    const materials = await db.Material.findAll({
-      where: { instructorId },
+    // Verify the batch exists and belongs to this instructor
+    const batch = await Batch.findOne({
+      where: { id: parseInt(batchId), instructorId },
       include: [
-        { model: db.Subject, as: 'subject' },
-        { model: db.Batch, as: 'batch', include: [{ model: db.Subject, as: 'subject' }] },
-        { model: db.User, as: 'instructor' },
+        {
+          model: Subject,
+          attributes: ['id', 'name', 'code', 'image'],
+          as: 'subject',
+        },
       ],
-      order: [['uploadedOn', 'DESC']],
     });
 
-    return sendResponse(res, 200, true, 'Materials retrieved successfully', materials);
-  } catch (error) {
-    console.error('Error retrieving materials:', error);
-    return sendResponse(res, 500, false, 'Error retrieving materials', error.message);
-  }
-};
-
-// Get materials by batch
-exports.getMaterialsByBatch = async (req, res) => {
-  try {
-    const { batchId } = req.params;
-
-    // Check if batch exists
-    const batch = await db.Batch.findByPk(batchId);
     if (!batch) {
-      return sendResponse(res, 404, false, 'Batch not found');
+      return res.status(404).json({
+        success: false,
+        message: 'Batch not found or you are not the assigned instructor for this batch.',
+      });
     }
 
-    // Get all materials for this batch
-    const materials = await db.Material.findAll({
-      where: { batchId },
+    // Get materials for this batch
+    const materials = await Material.findAll({
+      where: { batchId: parseInt(batchId) },
       include: [
-        { model: db.Subject, as: 'subject' },
-        { model: db.Batch, as: 'batch', include: [{ model: db.Subject, as: 'subject' }] },
-        { model: db.User, as: 'instructor' },
+        {
+          model: Batch,
+          attributes: ['id', 'name', 'code', 'sessionDate', 'sessionTime', 'instructorId', 'subjectId'],
+          as: 'batch',
+        },
+        {
+          model: Subject,
+          attributes: ['id', 'name', 'code', 'image'],
+          as: 'subject',
+        },
+        {
+          model: User,
+          attributes: ['id', 'name', 'email'],
+          foreignKey: 'instructorId',
+          as: 'instructor',
+        },
       ],
       order: [['uploadedOn', 'DESC']],
     });
 
-    return sendResponse(res, 200, true, 'Materials retrieved successfully', materials);
-  } catch (error) {
-    console.error('Error retrieving materials:', error);
-    return sendResponse(res, 500, false, 'Error retrieving materials', error.message);
-  }
-};
-
-// Get materials by subject for a batch
-exports.getMaterialsBySubjectAndBatch = async (req, res) => {
-  try {
-    const { subjectId, batchId } = req.params;
-
-    // Verify subject and batch exist
-    const subject = await db.Subject.findByPk(subjectId);
-    if (!subject) {
-      return sendResponse(res, 404, false, 'Subject not found');
-    }
-
-    const batch = await db.Batch.findByPk(batchId);
-    if (!batch) {
-      return sendResponse(res, 404, false, 'Batch not found');
-    }
-
-    // Get materials for this subject and batch
-    const materials = await db.Material.findAll({
-      where: { subjectId, batchId },
-      include: [
-        { model: db.Subject, as: 'subject' },
-        { model: db.Batch, as: 'batch', include: [{ model: db.Subject, as: 'subject' }] },
-        { model: db.User, as: 'instructor' },
-      ],
-      order: [['uploadedOn', 'DESC']],
+    res.status(200).json({
+      success: true,
+      message: 'Instructor materials retrieved successfully',
+      total: materials.length,
+      batchName: batch.name,
+      batchCode: batch.code,
+      subject: batch.subject,
+      data: materials,
     });
-
-    return sendResponse(res, 200, true, 'Materials retrieved successfully', materials);
   } catch (error) {
-    console.error('Error retrieving materials:', error);
-    return sendResponse(res, 500, false, 'Error retrieving materials', error.message);
-  }
-};
-
-// Get material by ID
-exports.getMaterialById = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const material = await db.Material.findByPk(id, {
-      include: [
-        { model: db.Subject, as: 'subject' },
-        { model: db.Batch, as: 'batch', include: [{ model: db.Subject, as: 'subject' }] },
-        { model: db.User, as: 'instructor' },
-      ],
-    });
-
-    if (!material) {
-      return sendResponse(res, 404, false, 'Material not found');
-    }
-
-    return sendResponse(res, 200, true, 'Material retrieved successfully', material);
-  } catch (error) {
-    console.error('Error retrieving material:', error);
-    return sendResponse(res, 500, false, 'Error retrieving material', error.message);
-  }
-};
-
-// Update material
-exports.updateMaterial = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { title, description, subjectId, batchId } = req.body;
-
-    const material = await db.Material.findByPk(id);
-    if (!material) {
-      return sendResponse(res, 404, false, 'Material not found');
-    }
-
-    // If subject is being updated, verify it exists
-    if (subjectId && subjectId !== material.subjectId) {
-      const subject = await db.Subject.findByPk(subjectId);
-      if (!subject) {
-        return sendResponse(res, 404, false, 'Subject not found');
-      }
-    }
-
-    // If batch is being updated, verify it exists
-    if (batchId && batchId !== material.batchId) {
-      const batch = await db.Batch.findByPk(batchId);
-      if (!batch) {
-        return sendResponse(res, 404, false, 'Batch not found');
-      }
-    }
-
-    // Update material
-    await material.update({
-      title: title || material.title,
-      description: description !== undefined ? description : material.description,
-      subjectId: subjectId || material.subjectId,
-      batchId: batchId || material.batchId,
-    });
-
-    // Fetch updated material with associations
-    const updatedMaterial = await db.Material.findByPk(id, {
-      include: [
-        { model: db.Subject, as: 'subject' },
-        { model: db.Batch, as: 'batch', include: [{ model: db.Subject, as: 'subject' }] },
-        { model: db.User, as: 'instructor' },
-      ],
-    });
-
-    return sendResponse(res, 200, true, 'Material updated successfully', updatedMaterial);
-  } catch (error) {
-    console.error('Error updating material:', error);
-    return sendResponse(res, 500, false, 'Error updating material', error.message);
-  }
-};
-
-// Delete material
-exports.deleteMaterial = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const material = await db.Material.findByPk(id);
-    if (!material) {
-      return sendResponse(res, 404, false, 'Material not found');
-    }
-
-    await material.destroy();
-
-    return sendResponse(res, 200, true, 'Material deleted successfully');
-  } catch (error) {
-    console.error('Error deleting material:', error);
-    return sendResponse(res, 500, false, 'Error deleting material', error.message);
-  }
-};
-
-// Get materials for a specific instructor in a specific batch
-exports.getMaterialsByInstructorAndBatch = async (req, res) => {
-  try {
-    const { instructorId, batchId } = req.params;
-
-    // Verify instructor and batch exist
-    const instructor = await db.User.findByPk(instructorId);
-    if (!instructor) {
-      return sendResponse(res, 404, false, 'Instructor not found');
-    }
-
-    const batch = await db.Batch.findByPk(batchId);
-    if (!batch) {
-      return sendResponse(res, 404, false, 'Batch not found');
-    }
-
-    // Get materials for this instructor and batch
-    const materials = await db.Material.findAll({
-      where: { instructorId, batchId },
-      include: [
-        { model: db.Subject, as: 'subject' },
-        { model: db.Batch, as: 'batch', include: [{ model: db.Subject, as: 'subject' }] },
-        { model: db.User, as: 'instructor' },
-      ],
-      order: [['uploadedOn', 'DESC']],
-    });
-
-    return sendResponse(res, 200, true, 'Materials retrieved successfully', materials);
-  } catch (error) {
-    console.error('Error retrieving materials:', error);
-    return sendResponse(res, 500, false, 'Error retrieving materials', error.message);
+    console.error('Error in getInstructorMaterials:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };

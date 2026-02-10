@@ -1,69 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const materialController = require('../controllers/material.controller');
-const authMiddleware = require('../middlewares/auth.middleware');
-const roleMiddleware = require('../middlewares/role.middleware');
+const auth = require('../middlewares/auth.middleware');
 
-// Create a new material (only instructors can upload)
+// Create Material by Instructor for their associated batch
 router.post(
-  '/',
-  authMiddleware,
-  roleMiddleware('instructor', 'admin'),
-  materialController.createMaterial
+  '/instructor/create',
+  auth,
+  materialController.createInstructorMaterial
 );
 
-// Get all materials
-router.get('/', authMiddleware, materialController.getAllMaterials);
-
-// Get materials by instructor
+// Get all materials for the logged-in instructor's associated batch
 router.get(
-  '/instructor/:instructorId',
-  authMiddleware,
-  materialController.getMaterialsByInstructor
-);
-
-// Get materials by batch
-router.get(
-  '/batch/:batchId',
-  authMiddleware,
-  materialController.getMaterialsByBatch
-);
-
-// Get materials by subject and batch
-router.get(
-  '/subject/:subjectId/batch/:batchId',
-  authMiddleware,
-  materialController.getMaterialsBySubjectAndBatch
-);
-
-// Get materials by instructor and batch
-router.get(
-  '/instructor/:instructorId/batch/:batchId',
-  authMiddleware,
-  materialController.getMaterialsByInstructorAndBatch
-);
-
-// Get material by ID
-router.get(
-  '/:id',
-  authMiddleware,
-  materialController.getMaterialById
-);
-
-// Update material
-router.put(
-  '/:id',
-  authMiddleware,
-  roleMiddleware('instructor', 'admin'),
-  materialController.updateMaterial
-);
-
-// Delete material
-router.delete(
-  '/:id',
-  authMiddleware,
-  roleMiddleware('instructor', 'admin'),
-  materialController.deleteMaterial
+  '/instructor/materials/:batchId',
+  auth,
+  materialController.getInstructorMaterials
 );
 
 module.exports = router;
