@@ -168,6 +168,20 @@ db.Enquiry.belongsTo(db.Batch, {
 	as: 'batch',
 });
 
+// Many-to-many: Batch has many Students (Enquiries) through BatchStudent
+db.Batch.belongsToMany(db.Enquiry, {
+	through: db.BatchStudent,
+	foreignKey: 'batchId',
+	otherKey: 'enquiryId',
+	as: 'enrolledStudents',
+});
+db.Enquiry.belongsToMany(db.Batch, {
+	through: db.BatchStudent,
+	foreignKey: 'enquiryId',
+	otherKey: 'batchId',
+	as: 'enrolledBatches',
+});
+
 // One-to-many association between Package and Enquiry
 db.Package.hasMany(db.Enquiry, {
 	foreignKey: 'packageId',

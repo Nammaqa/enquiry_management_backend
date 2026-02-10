@@ -7,10 +7,10 @@ const { Formidable } = require('formidable');
 // Create Batch
 exports.createBatch = async (req, res) => {
   const form = new Formidable({ multiples: false, maxFileSize: 50 * 1024 * 1024, keepExtensions: true });
-  
+
   try {
     const [fields, files] = await form.parse(req);
-    
+
     // Extract fields from formidable
     const name = fields.name ? fields.name[0] : null;
     const code = fields.code ? fields.code[0] : null;
@@ -23,7 +23,7 @@ exports.createBatch = async (req, res) => {
     const subjectId = fields.subjectId ? parseInt(fields.subjectId[0]) : null;
     const instructorId = fields.instructorId ? parseInt(fields.instructorId[0]) : null;
     const imageFile = files.image ? files.image[0] : null;
-    
+
     const userId = req.user.id;  // From authenticated User
     const userRole = req.user.role;  // Role validation
 
@@ -117,8 +117,8 @@ exports.createBatch = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: approvalStatus === 'pending' 
-        ? 'Batch created successfully. Awaiting approval from Admin/Counsellor.' 
+      message: approvalStatus === 'pending'
+        ? 'Batch created successfully. Awaiting approval from Admin/Counsellor.'
         : 'Batch created successfully',
       approvalStatus,
       data: batch,
@@ -295,11 +295,11 @@ exports.getBatchById = async (req, res) => {
 // Update Batch (instructor updates go to pending, admin/counsellor can update freely)
 exports.updateBatch = async (req, res) => {
   const form = new Formidable({ multiples: false, maxFileSize: 50 * 1024 * 1024, keepExtensions: true });
-  
+
   try {
     const [fields, files] = await form.parse(req);
     const { batchId } = req.params;
-    
+
     // Extract fields from formidable
     const name = fields.name ? fields.name[0] : null;
     const code = fields.code ? fields.code[0] : null;
@@ -313,7 +313,7 @@ exports.updateBatch = async (req, res) => {
     const instructorId = fields.instructorId ? parseInt(fields.instructorId[0]) : null;
     const approvalStatus = fields.approvalStatus ? fields.approvalStatus[0] : null;
     const imageFile = files.image ? files.image[0] : null;
-    
+
     const userId = req.user.id;
     const userRole = req.user.role;
 
@@ -326,8 +326,8 @@ exports.updateBatch = async (req, res) => {
     // Instructors can only update their own batches or approved batches created by admin/counsellor
     if (userRole === 'INSTRUCTOR') {
       if (batch.createdBy !== userId && batch.approvalStatus !== 'approved') {
-        return res.status(403).json({ 
-          message: 'Access denied. Only approved batches can be updated by other instructors' 
+        return res.status(403).json({
+          message: 'Access denied. Only approved batches can be updated by other instructors'
         });
       }
     }
@@ -390,8 +390,8 @@ exports.updateBatch = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: userRole === 'INSTRUCTOR' 
-        ? 'Batch updated and sent for approval' 
+      message: userRole === 'INSTRUCTOR'
+        ? 'Batch updated and sent for approval'
         : 'Batch updated successfully',
       data: batch,
     });
@@ -434,6 +434,66 @@ exports.updateApprovalStatus = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in updateApprovalStatus:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Add students to batch
+exports.addStudentstoBatch = async (req, res) => {
+  try {
+    const { batchId, studentIds } = req.body;
+
+    if (!batchId || !studentIds || !Array.isArray(studentIds)) {
+      return res.status(400).json({
+        message: 'batchId and studentIds (array of enquiry IDs) are required',
+      });
+    }
+
+    const batch = await db.Batch.findByPk(batchId);
+    if (!batch) {
+      return res.status(404).json({ message: 'Batch not found' });
+    }
+
+    const addedStudents = [];
+    const existingStudents = [];
+
+    for (const enquiryId of studentIds) {
+      // Check if student exists in Enquiry table
+      const student = await db.Enquiry.findByPk(enquiryId);
+      if (!student) {
+        console.warn(`Student with ID ${enquiryId} not found, skipping.`);
+        continue;
+      }
+
+      // Check if already in batch
+      const existingEntry = await db.BatchStudent.findOne({
+        where: {
+          batchId,
+          enquiryId,
+        },
+      });
+
+      if (existingEntry) {
+        existingStudents.push(enquiryId);
+      } else {
+        await db.BatchStudent.create({
+          batchId,
+          enquiryId,
+        });
+        addedStudents.push(enquiryId);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Students processed for batch enrollment',
+      data: {
+        added: addedStudents,
+        existing: existingStudents,
+      },
+    });
+  } catch (error) {
+    console.error('Error in addStudentstoBatch:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -524,6 +584,74 @@ exports.getInstructorSubjects = async (req, res) => {
   }
 };
 
+// Get all students for enrollment (status 'class' or 'class qualified')
+exports.getBatchStudentsforEnrollment = async (req, res) => {
+  try {
+    const students = await db.Enquiry.findAll({
+      where: {
+        candidateStatus: {
+          [db.Sequelize.Op.in]: ['class', 'class qualified']
+        }
+      },
+      attributes: ['id', 'name', 'email', 'phone', 'candidateStatus', 'packageId'],
+      include: [
+        {
+          model: db.Batch,
+          as: 'enrolledBatches',
+          attributes: ['id', 'name'],
+          through: { attributes: [] },
+          required: false
+        },
+        {
+          model: db.Package,
+          as: 'package',
+          attributes: ['id', 'name'],
+          required: false,
+          include: [
+            {
+              model: db.Subject,
+              attributes: ['id', 'name'],
+              through: { attributes: [] },
+              required: false
+            }
+          ]
+        }
+      ],
+      order: [['name', 'ASC']]
+    });
+
+    // Format the response
+    const formattedStudents = students.map(student => {
+      const studentData = student.toJSON();
+
+      return {
+        id: studentData.id,
+        name: studentData.name,
+        email: studentData.email,
+        phone: studentData.phone,
+        candidateStatus: studentData.candidateStatus,
+        packageId: studentData.packageId,
+        enrolledBatches: studentData.enrolledBatches || [],
+        packageName: studentData.package?.name || null,
+        subjectNames: studentData.package?.Subjects?.map(s => s.name) || []
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      count: formattedStudents.length,
+      data: formattedStudents
+    });
+
+  } catch (error) {
+    console.error('Error in getBatchStudentsforEnrollment:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 // Delete Batch (only admin/counsellor can delete, instructors cannot delete)
 exports.deleteBatch = async (req, res) => {
   try {
@@ -533,8 +661,8 @@ exports.deleteBatch = async (req, res) => {
 
     // Only admin/counsellor can delete batches
     if (userRole !== 'ADMIN' && userRole !== 'COUNSELLOR') {
-      return res.status(403).json({ 
-        message: 'Access denied. Only Admin and Counsellor can delete batches. Instructors must request approval to delete.' 
+      return res.status(403).json({
+        message: 'Access denied. Only Admin and Counsellor can delete batches. Instructors must request approval to delete.'
       });
     }
 
@@ -557,3 +685,4 @@ exports.deleteBatch = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+

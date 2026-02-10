@@ -38,6 +38,20 @@ router.get(
   batchController.getInstructorSubjects
 );
 
+// Add students to batch
+router.post(
+  '/students/addstudent-tobatch',
+  auth,
+  batchController.addStudentstoBatch
+);
+
+// Get students for batch enrollment (status 'class' or 'class qualified')
+router.get(
+  '/students/enrollment',
+  auth,
+  batchController.getBatchStudentsforEnrollment
+);
+
 // Get batch by ID
 router.get(
   '/:batchId',
