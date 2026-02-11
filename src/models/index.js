@@ -182,6 +182,27 @@ db.Enquiry.belongsToMany(db.Batch, {
 	as: 'enrolledBatches',
 });
 
+// ONE-TO-MANY: BatchStudent belongs to Enquiry
+db.BatchStudent.belongsTo(db.Enquiry, {
+	foreignKey: 'enquiryId',
+	as: 'enquiry',
+});
+db.Enquiry.hasMany(db.BatchStudent, {
+	foreignKey: 'enquiryId',
+	as: 'batchStudents',
+});
+
+// ONE-TO-MANY: BatchStudent belongs to Batch
+db.BatchStudent.belongsTo(db.Batch, {
+	foreignKey: 'batchId',
+	as: 'batch',
+});
+db.Batch.hasMany(db.BatchStudent, {
+	foreignKey: 'batchId',
+	as: 'batchStudents',
+});
+
+
 // One-to-many association between Package and Enquiry
 db.Package.hasMany(db.Enquiry, {
 	foreignKey: 'packageId',
