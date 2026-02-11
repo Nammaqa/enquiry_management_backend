@@ -17,4 +17,18 @@ router.get(
   materialController.getInstructorMaterials
 );
 
+// Update Material
+router.put(
+  '/instructor/update/:id',
+  auth,
+  materialController.updateInstructorMaterial
+);
+
+// Delete Material
+router.delete(
+  '/instructor/delete/:id',
+  auth,
+  materialController.deleteInstructorMaterial
+);
+
 module.exports = router;

@@ -3,7 +3,7 @@ const cors = require('cors');
 const app = express();
 
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174','https://enquiry-node.vercel.app','*'],
+  origin: ['http://localhost:5173', 'http://localhost:5174', 'https://enquiry-node.vercel.app'],
   credentials: true
 }));
 
@@ -31,10 +31,10 @@ app.get('/api/health', (req, res) => {
 app.get('/api/debug', async (req, res) => {
   try {
     const { sequelize } = require('./models');
-    
+
     // Test database connection
     await sequelize.authenticate();
-    
+
     res.status(200).json({
       status: 'success',
       database: 'connected',

@@ -185,3 +185,101 @@ exports.getInstructorMaterials = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// Update Material
+exports.updateInstructorMaterial = async (req, res) => {
+  const form = new Formidable({ multiples: false, maxFileSize: 50 * 1024 * 1024, keepExtensions: true });
+
+  try {
+    const { id } = req.params;
+    const instructorId = req.user.userId;
+
+    const [fields, files] = await form.parse(req);
+    // Handle array values from formidable
+    const title = fields.title ? fields.title[0] : null;
+    const description = fields.description ? fields.description[0] : null;
+
+    const material = await Material.findOne({
+      where: { id, instructorId },
+    });
+
+    if (!material) {
+      return res.status(404).json({
+        success: false,
+        message: 'Material not found or you are not authorized to update it',
+      });
+    }
+
+    // Update basic fields
+    if (title) material.title = title;
+    if (description !== undefined) material.description = description;
+
+    // Handle file update if provided
+    const uploadedFile = files.file ? files.file[0] : (files.document ? files.document[0] : null);
+
+    if (uploadedFile) {
+      const fileBuffer = await fs.readFile(uploadedFile.filepath);
+      const uniqueName = `material-${material.batchId}-${Date.now()}`;
+
+      try {
+        const uploadResult = await uploadImage(fileBuffer, uniqueName);
+
+        // Note: Old file deletion is skipped as we don't store public_id explicitly
+        // and deriving it reliably without storage is risky.
+
+        material.documentUrl = uploadResult.secure_url;
+        material.documentName = uploadedFile.originalFilename || uploadedFile.newFilename;
+      } catch (uploadError) {
+        console.error('Cloudinary upload error:', uploadError);
+        return res.status(400).json({
+          message: 'Failed to upload new material document',
+          error: uploadError.message,
+        });
+      } finally {
+        await fs.unlink(uploadedFile.filepath).catch(() => { });
+      }
+    }
+
+    await material.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Material updated successfully',
+      data: material,
+    });
+
+  } catch (error) {
+    console.error('Error in updateInstructorMaterial:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Delete Material
+exports.deleteInstructorMaterial = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const instructorId = req.user.userId;
+
+    const material = await Material.findOne({
+      where: { id, instructorId },
+    });
+
+    if (!material) {
+      return res.status(404).json({
+        success: false,
+        message: 'Material not found or you are not authorized to delete it',
+      });
+    }
+
+    await material.destroy();
+
+    res.status(200).json({
+      success: true,
+      message: 'Material deleted successfully',
+    });
+
+  } catch (error) {
+    console.error('Error in deleteInstructorMaterial:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
