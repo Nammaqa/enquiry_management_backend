@@ -7,7 +7,7 @@ const User = db.User;
 const { Formidable } = require('formidable');
 const fs = require('fs').promises;
 const path = require('path');
-const { uploadDocument } = require('../utils/cloudinary');
+const { uploadDocument, deleteDocument } = require('../utils/cloudinary');
 
 // POST API: Schedule Mock Interview for Batch Students
 exports.scheduleMockInterview = async (req, res) => {
@@ -445,11 +445,21 @@ exports.addInterviewFeedback = async (req, res) => {
   }
 };
 
-// PUT API: Update mock interview details
+// PUT API: Update mock interview details with form data and file upload
 exports.updateMockInterview = async (req, res) => {
+  const form = new Formidable({ multiples: false, maxFileSize: 50 * 1024 * 1024, keepExtensions: true });
+
   try {
     const { interviewId } = req.params;
-    const { interviewDate, interviewTime, mode, interviewLink, studentName } = req.body;
+    const [fields, files] = await form.parse(req);
+
+    // Extract fields from FormData
+    const interviewDate = fields.interviewDate ? fields.interviewDate[0] : null;
+    const interviewTime = fields.interviewTime ? fields.interviewTime[0] : null;
+    const mode = fields.mode ? fields.mode[0] : null;
+    const interviewLink = fields.interviewLink ? fields.interviewLink[0] : null;
+    const studentName = fields.studentName ? fields.studentName[0] : null;
+    const removeDocument = fields.removeDocument ? fields.removeDocument[0] : 'false';
 
     // Validate interviewId
     if (!interviewId) {
@@ -499,6 +509,51 @@ exports.updateMockInterview = async (req, res) => {
       interview.interviewLink = null;
     }
 
+    // Handle document upload if provided
+    const uploadedFile = files.document ? files.document[0] : null;
+
+    if (uploadedFile) {
+      // Delete old document if it exists
+      if (interview.documentUpload) {
+        try {
+          const oldPublicId = interview.documentUpload.split('/').pop().split('.')[0];
+          await deleteDocument(`enquiry_system/${oldPublicId}`);
+        } catch (deleteError) {
+          console.warn('Failed to delete old document:', deleteError);
+        }
+      }
+
+      // Upload new document
+      const fileBuffer = await fs.readFile(uploadedFile.filepath);
+      const uniqueName = `mock-interview-${interviewId}-${Date.now()}`;
+
+      try {
+        const uploadResult = await uploadDocument(fileBuffer, uniqueName);
+        interview.documentUpload = uploadResult.secure_url;
+      } catch (uploadError) {
+        console.error('Cloudinary upload error:', uploadError);
+        await fs.unlink(uploadedFile.filepath).catch(() => { });
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to upload document',
+          error: uploadError.message,
+        });
+      } finally {
+        await fs.unlink(uploadedFile.filepath).catch(() => { });
+      }
+    }
+
+    // Handle document removal if requested
+    if (removeDocument === 'true' && interview.documentUpload) {
+      try {
+        const publicId = interview.documentUpload.split('/').pop().split('.')[0];
+        await deleteDocument(`enquiry_system/${publicId}`);
+        interview.documentUpload = null;
+      } catch (deleteError) {
+        console.warn('Failed to delete document:', deleteError);
+      }
+    }
+
     await interview.save();
 
     // Fetch the updated interview with associations
@@ -536,10 +591,13 @@ exports.updateMockInterview = async (req, res) => {
   }
 };
 
-// DELETE API: Delete mock interview
+// DELETE API: Delete mock interview with form data and document cleanup
 exports.deleteMockInterview = async (req, res) => {
+  const form = new Formidable({ multiples: false, maxFileSize: 50 * 1024 * 1024, keepExtensions: true });
+
   try {
     const { interviewId } = req.params;
+    const [fields] = await form.parse(req);
 
     // Validate interviewId
     if (!interviewId) {
@@ -565,14 +623,26 @@ exports.deleteMockInterview = async (req, res) => {
       studentEmail: interview.studentEmail,
       interviewDate: interview.interviewDate,
       interviewTime: interview.interviewTime,
+      documentUrl: interview.documentUpload,
     };
 
-    // Delete the interview
+    // Delete associated document from Cloudinary if it exists
+    if (interview.documentUpload) {
+      try {
+        const publicId = interview.documentUpload.split('/').pop().split('.')[0];
+        await deleteDocument(`enquiry_system/${publicId}`);
+        console.log('Document deleted successfully from Cloudinary');
+      } catch (deleteError) {
+        console.warn('Failed to delete document from Cloudinary:', deleteError);
+      }
+    }
+
+    // Delete the interview record
     await interview.destroy();
 
     res.status(200).json({
       success: true,
-      message: 'Mock interview deleted successfully',
+      message: 'Mock interview and associated documents deleted successfully',
       data: deletedInterviewData,
     });
   } catch (error) {
