@@ -444,3 +444,142 @@ exports.addInterviewFeedback = async (req, res) => {
     });
   }
 };
+
+// PUT API: Update mock interview details
+exports.updateMockInterview = async (req, res) => {
+  try {
+    const { interviewId } = req.params;
+    const { interviewDate, interviewTime, mode, interviewLink, studentName } = req.body;
+
+    // Validate interviewId
+    if (!interviewId) {
+      return res.status(400).json({
+        success: false,
+        message: 'interviewId is required',
+      });
+    }
+
+    // Find the interview
+    const interview = await MockInterview.findByPk(interviewId);
+    if (!interview) {
+      return res.status(404).json({
+        success: false,
+        message: 'Interview not found',
+      });
+    }
+
+    // Validate mode if provided
+    if (mode && !['online', 'offline'].includes(mode.toLowerCase())) {
+      return res.status(400).json({
+        success: false,
+        message: 'mode must be either "online" or "offline"',
+      });
+    }
+
+    // Normalize mode to lowercase if provided
+    const normalizedMode = mode ? mode.toLowerCase() : interview.mode;
+
+    // Validate online mode has interview link
+    if (normalizedMode === 'online' && mode && !interviewLink && !interview.interviewLink) {
+      return res.status(400).json({
+        success: false,
+        message: 'interviewLink is required for online mode',
+      });
+    }
+
+    // Update fields if provided
+    if (interviewDate) interview.interviewDate = interviewDate;
+    if (interviewTime) interview.interviewTime = interviewTime;
+    if (mode) interview.mode = normalizedMode;
+    if (interviewLink) interview.interviewLink = interviewLink;
+    if (studentName) interview.studentName = studentName;
+
+    // For offline mode, clear the interview link
+    if (normalizedMode === 'offline') {
+      interview.interviewLink = null;
+    }
+
+    await interview.save();
+
+    // Fetch the updated interview with associations
+    const updatedInterview = await MockInterview.findByPk(interviewId, {
+      include: [
+        {
+          model: Enquiry,
+          as: 'enquiry',
+          attributes: ['id', 'name', 'email', 'phone', 'candidateStatus'],
+        },
+        {
+          model: User,
+          as: 'instructor',
+          attributes: ['id', 'name', 'email'],
+        },
+        {
+          model: Batch,
+          as: 'batch',
+          attributes: ['id', 'name', 'code'],
+        },
+      ],
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Mock interview updated successfully',
+      data: updatedInterview,
+    });
+  } catch (error) {
+    console.error('Error in updateMockInterview:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// DELETE API: Delete mock interview
+exports.deleteMockInterview = async (req, res) => {
+  try {
+    const { interviewId } = req.params;
+
+    // Validate interviewId
+    if (!interviewId) {
+      return res.status(400).json({
+        success: false,
+        message: 'interviewId is required',
+      });
+    }
+
+    // Find the interview
+    const interview = await MockInterview.findByPk(interviewId);
+    if (!interview) {
+      return res.status(404).json({
+        success: false,
+        message: 'Interview not found',
+      });
+    }
+
+    // Store interview details for response before deleting
+    const deletedInterviewData = {
+      id: interview.id,
+      studentName: interview.studentName,
+      studentEmail: interview.studentEmail,
+      interviewDate: interview.interviewDate,
+      interviewTime: interview.interviewTime,
+    };
+
+    // Delete the interview
+    await interview.destroy();
+
+    res.status(200).json({
+      success: true,
+      message: 'Mock interview deleted successfully',
+      data: deletedInterviewData,
+    });
+  } catch (error) {
+    console.error('Error in deleteMockInterview:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

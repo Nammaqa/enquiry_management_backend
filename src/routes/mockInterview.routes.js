@@ -18,4 +18,10 @@ router.put('/:interviewId/status', auth, mockInterviewController.updateInterview
 // PUT: Add feedback and score to mock interview
 router.put('/:interviewId/feedback', auth, mockInterviewController.addInterviewFeedback);
 
+// PUT: Update mock interview details (date, time, mode, link, student name)
+router.put('/:interviewId', auth, mockInterviewController.updateMockInterview);
+
+// DELETE: Delete mock interview
+router.delete('/:interviewId', auth, mockInterviewController.deleteMockInterview);
+
 module.exports = router;
