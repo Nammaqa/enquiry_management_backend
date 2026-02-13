@@ -53,4 +53,25 @@ router.put(
   instructorController.updateInstructorProfile
 );
 
+// Get all assignments by subject ID
+router.get(
+  '/assignments/subject/:subjectId',
+  auth,
+  instructorController.getAssignmentsBySubject
+);
+
+// Get all batches by subject ID and instructor ID
+router.get(
+  '/batches/:subjectId/:instructorId',
+  auth,
+  instructorController.getBatchesBySubjectAndInstructor
+);
+
+// Get all assignments by batch ID
+router.get(
+  '/assignments/batch/:batchId',
+  auth,
+  instructorController.getAssignmentsByBatch
+);
+
 module.exports = router;

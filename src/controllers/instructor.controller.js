@@ -467,6 +467,234 @@ exports.updateInstructorProfile = async (req, res) => {
   }
 };
 
+// Get all assignments by subject ID
+exports.getAssignmentsBySubject = async (req, res) => {
+  try {
+    const { subjectId } = req.params;
+    const userRole = req.user.role;
+    const userId = req.user.id;
+
+    if (!subjectId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Subject ID is required',
+      });
+    }
+
+    // Check if subject exists
+    const subject = await Subject.findByPk(subjectId);
+    if (!subject) {
+      return res.status(404).json({
+        success: false,
+        message: 'Subject not found',
+      });
+    }
+
+    // If instructor, check if they are assigned to this subject
+    if (userRole === 'instructor') {
+      const isAssigned = await Instructor.findOne({
+        where: { userId, subjectId },
+      });
+      if (!isAssigned) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. You are not assigned to this subject',
+        });
+      }
+    }
+
+    // Get all assignments for this subject
+    const assignments = await Assignment.findAll({
+      where: { subjectId },
+      include: [
+        {
+          model: Batch,
+          attributes: ['id', 'name', 'code', 'status'],
+        },
+        {
+          model: Subject,
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: User,
+          as: 'instructor',
+          attributes: ['id', 'name', 'email'],
+        },
+      ],
+      order: [['createdDate', 'DESC']],
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Assignments retrieved successfully',
+      total: assignments.length,
+      data: assignments,
+    });
+  } catch (error) {
+    console.error('Error in getAssignmentsBySubject:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Get all batches by subject ID and instructor ID
+exports.getBatchesBySubjectAndInstructor = async (req, res) => {
+  try {
+    const { subjectId, instructorId } = req.params;
+    const userRole = req.user.role;
+    const userId = req.user.id;
+
+    if (!subjectId || !instructorId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Subject ID and Instructor ID are required',
+      });
+    }
+
+    // Check if subject exists
+    const subject = await Subject.findByPk(subjectId);
+    if (!subject) {
+      return res.status(404).json({
+        success: false,
+        message: 'Subject not found',
+      });
+    }
+
+    // Check if instructor exists
+    const instructor = await User.findByPk(instructorId);
+    if (!instructor || instructor.role !== 'instructor') {
+      return res.status(404).json({
+        success: false,
+        message: 'Instructor not found',
+      });
+    }
+
+    // If instructor, they can only view their own batches
+    if (userRole === 'instructor' && userId !== parseInt(instructorId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only view your own batches',
+      });
+    }
+
+    // Get all batches for this subject and instructor
+    const batches = await Batch.findAll({
+      where: {
+        subjectId,
+        instructorId,
+      },
+      include: [
+        {
+          model: Subject,
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: User,
+          as: 'instructor',
+          attributes: ['id', 'name', 'email'],
+        },
+      ],
+      order: [['sessionDate', 'DESC']],
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Batches retrieved successfully',
+      total: batches.length,
+      data: batches,
+    });
+  } catch (error) {
+    console.error('Error in getBatchesBySubjectAndInstructor:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Get all assignments by batch ID
+exports.getAssignmentsByBatch = async (req, res) => {
+  try {
+    const { batchId } = req.params;
+    const userRole = req.user.role;
+    const userId = req.user.id;
+
+    if (!batchId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Batch ID is required',
+      });
+    }
+
+    // Check if batch exists
+    const batch = await Batch.findByPk(batchId, {
+      include: [
+        {
+          model: Subject,
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: User,
+          as: 'instructor',
+          attributes: ['id', 'name', 'email'],
+        },
+      ],
+    });
+
+    if (!batch) {
+      return res.status(404).json({
+        success: false,
+        message: 'Batch not found',
+      });
+    }
+
+    // If instructor, check if it's their batch
+    if (userRole === 'instructor' && batch.instructorId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. This is not your batch',
+      });
+    }
+
+    // Get all assignments for this batch
+    const assignments = await Assignment.findAll({
+      where: { batchId },
+      include: [
+        {
+          model: Batch,
+          attributes: ['id', 'name', 'code', 'status'],
+        },
+        {
+          model: Subject,
+          attributes: ['id', 'name', 'code'],
+        },
+        {
+          model: User,
+          as: 'instructor',
+          attributes: ['id', 'name', 'email'],
+        },
+      ],
+      order: [['createdDate', 'DESC']],
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Assignments retrieved successfully',
+      total: assignments.length,
+      batch: batch,
+      data: assignments,
+    });
+  } catch (error) {
+    console.error('Error in getAssignmentsByBatch:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // Get all instructors (ADMIN and COUNSELLOR only)
 exports.getAllInstructors = async (req, res) => {
   try {

@@ -148,6 +148,16 @@ db.Batch.belongsTo(db.User, {
 	as: 'creator',
 });
 
+// One-to-many association between User (Instructor) and Batch
+db.User.hasMany(db.Batch, {
+	foreignKey: 'instructorId',
+	onDelete: 'SET NULL',
+});
+db.Batch.belongsTo(db.User, {
+	foreignKey: 'instructorId',
+	as: 'instructor',
+});
+
 // One-to-many association between Subject and Batch
 db.Subject.hasMany(db.Batch, {
 	foreignKey: 'subjectId',
