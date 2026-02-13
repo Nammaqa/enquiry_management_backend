@@ -350,3 +350,97 @@ exports.updateInterviewStatus = async (req, res) => {
     });
   }
 };
+
+// PUT API: Add feedback and score to mock interview
+exports.addInterviewFeedback = async (req, res) => {
+  try {
+    const { interviewId } = req.params;
+    const { feedbackText, score } = req.body;
+
+    // Validate interviewId
+    if (!interviewId) {
+      return res.status(400).json({
+        success: false,
+        message: 'interviewId is required',
+      });
+    }
+
+    // Validate feedbackText
+    if (!feedbackText || typeof feedbackText !== 'string' || feedbackText.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'feedbackText is required and must be a non-empty string',
+      });
+    }
+
+    // Validate score
+    if (score === undefined || score === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'score is required',
+      });
+    }
+
+    const scoreNum = Number(score);
+    if (isNaN(scoreNum)) {
+      return res.status(400).json({
+        success: false,
+        message: 'score must be a valid number',
+      });
+    }
+
+    if (scoreNum < 0 || scoreNum > 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'score must be between 0 and 10',
+      });
+    }
+
+    // Find the interview
+    const interview = await MockInterview.findByPk(interviewId);
+    if (!interview) {
+      return res.status(404).json({
+        success: false,
+        message: 'Interview not found',
+      });
+    }
+
+    // Update the feedback and score
+    interview.feedback = feedbackText.trim();
+    interview.score = scoreNum;
+    await interview.save();
+
+    // Fetch the updated interview with associations
+    const updatedInterview = await MockInterview.findByPk(interviewId, {
+      include: [
+        {
+          model: Enquiry,
+          as: 'enquiry',
+          attributes: ['id', 'name', 'email', 'phone', 'candidateStatus'],
+        },
+        {
+          model: User,
+          as: 'instructor',
+          attributes: ['id', 'name', 'email'],
+        },
+        {
+          model: Batch,
+          as: 'batch',
+          attributes: ['id', 'name', 'code'],
+        },
+      ],
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Interview feedback and score added successfully',
+      data: updatedInterview,
+    });
+  } catch (error) {
+    console.error('Error in addInterviewFeedback:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

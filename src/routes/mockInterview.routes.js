@@ -15,4 +15,7 @@ router.get('/batch/:batchId/students', auth, mockInterviewController.getMockInte
 // PUT: Update interview status (attended/not-attended)
 router.put('/:interviewId/status', auth, mockInterviewController.updateInterviewStatus);
 
+// PUT: Add feedback and score to mock interview
+router.put('/:interviewId/feedback', auth, mockInterviewController.addInterviewFeedback);
+
 module.exports = router;
