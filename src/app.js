@@ -8,6 +8,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
 app.get('/', (req, res) => {
@@ -69,8 +70,9 @@ app.use('/api/billings', require('./routes/billing.routes'));
 app.use('/api/materials', require('./routes/material.routes'));
 app.use('/api/feedbacks', require('./routes/feedback.routes'));
 app.use('/api/batch-content', require('./routes/batchContent.routes'));
-app.use('/api/classfeeds', require('./routes/classfeed.routes'));
+
 app.use('/api/instructor-subjects', require('./routes/instructorsubject.routes'));
+app.use('/api/student-batches', require('./routes/studentbatch.routes'));
 // app.use('/api/attendance', require('./routes/attendance.routes'));
 // app.use('/api/placements', require('./routes/placement.routes'));
 

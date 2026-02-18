@@ -1,5 +1,6 @@
 const { Enquiry } = require('../models');
 const { Op } = require('sequelize');
+const bcrypt = require('bcryptjs');
 
 /**
  * CREATE Enquiry (ADMIN only)
@@ -12,23 +13,23 @@ exports.createEnquiry = async (req, res) => {
       name,
       email,
       phone,
-      
+
       // Personal details
       current_location,
       profession,
       qualification,
       experience,
-      
+
       // Enrollment details
       packageId,
       batchId,
       subjectIds,
-      
+
       // Preferences
       trainingMode,
       trainingTime,
       startTime,
-      
+
       // Additional info
       referral,
       consent,
@@ -37,6 +38,7 @@ exports.createEnquiry = async (req, res) => {
 
     // Validate required fields
     if (!name || !email || !phone) {
+      console.log('Validation failed - missing required fields. Received body:', req.body);
       return res.status(400).json({
         message: 'Name, email, and phone are required fields'
       });
@@ -70,8 +72,8 @@ exports.createEnquiry = async (req, res) => {
 
     if (existing) {
       return res.status(400).json({
-        message: existing.email === email.toLowerCase() 
-          ? 'An enquiry with this email already exists' 
+        message: existing.email === email.toLowerCase()
+          ? 'An enquiry with this email already exists'
           : 'An enquiry with this phone number already exists'
       });
     }
@@ -98,6 +100,9 @@ exports.createEnquiry = async (req, res) => {
       });
     }
 
+    // Hash the default password before storing
+    const hashedPassword = await bcrypt.hash('nammaqa@1', 10);
+
     // Create enquiry with all details
     const enquiry = await Enquiry.create({
       name: name.trim(),
@@ -116,6 +121,9 @@ exports.createEnquiry = async (req, res) => {
       referral: referral?.trim() || null,
       consent: consent || false,
       candidateStatus: candidateStatus || 'enquiry stage',
+      password: hashedPassword,
+      globalUser: false,
+      passwordChanged: false,
     });
 
     res.status(201).json({

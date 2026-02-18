@@ -1,6 +1,7 @@
-module.exports = (sequelize, DataTypes) => {
-    return sequelize.define(
+const bcrypt = require('bcryptjs');
 
+module.exports = (sequelize, DataTypes) => {
+    const Enquiry = sequelize.define(
         'Enquiry',
         {
             id: {
@@ -15,6 +16,18 @@ module.exports = (sequelize, DataTypes) => {
             email: {
                 type: DataTypes.STRING,
                 allowNull: false,
+            },
+            password: {
+                type: DataTypes.STRING,
+                allowNull: true,
+            },
+            passwordChanged: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: false,
+            },
+            globalUser: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: true,
             },
             phone: {
                 type: DataTypes.STRING(20),
@@ -78,7 +91,7 @@ module.exports = (sequelize, DataTypes) => {
                 defaultValue: false,
             },
             candidateStatus: {
-                type: DataTypes.ENUM('demo', 'qualified demo', 'class', 'class qualified', 'placement','enquiry stage'),
+                type: DataTypes.ENUM('demo', 'qualified demo', 'class', 'class qualified', 'placement', 'enquiry stage'),
                 allowNull: false,
                 defaultValue: 'demo',
             },
@@ -88,4 +101,17 @@ module.exports = (sequelize, DataTypes) => {
             freezeTableName: true,
         }
     );
+
+    Enquiry.beforeUpdate(async (enquiry) => {
+        if (enquiry.changed('password')) {
+            const salt = await bcrypt.genSalt(10);
+            enquiry.password = await bcrypt.hash(enquiry.password, salt);
+        }
+    });
+
+    Enquiry.prototype.comparePassword = async function (enteredPassword) {
+        return await bcrypt.compare(enteredPassword, this.password);
+    };
+
+    return Enquiry;
 };

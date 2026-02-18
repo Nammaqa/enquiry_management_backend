@@ -1,6 +1,7 @@
 const db = require('../models');
 const { signToken } = require('../config/jwt');
-const { comparePassword } = require('../utils/password');
+const bcrypt = require('bcryptjs');
+const { Op } = require('sequelize');
 
 const Enquiry = db.Enquiry;
 const Batch = db.Batch;
@@ -14,63 +15,144 @@ const MockInterview = db.MockInterview;
 const sequelize = db.sequelize;
 
 /**
+ * ENQUIRY STUDENT SIGNUP
+ * Public route — any student can self-register
+ * Required: name, email, phone, password
+ * Optional: current_location, profession, qualification, experience,
+ *           trainingMode, trainingTime, startTime, referral, consent
+ */
+exports.enquiryStudentSignup = async (req, res) => {
+  try {
+    const {
+      name,
+      email,
+      phone,
+      password,
+    } = req.body;
+
+    // Validate required fields
+    if (!name || !email || !phone || !password) {
+      return res.status(400).json({ message: 'Name, email, phone, and password are required' });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: 'Invalid email format' });
+    }
+
+    // Validate phone (at least 10 digits)
+    const phoneDigits = phone.replace(/\D/g, '');
+    if (phoneDigits.length < 10) {
+      return res.status(400).json({ message: 'Phone number must contain at least 10 digits' });
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    }
+
+    // Check for existing enquiry with same email or phone
+    const existing = await Enquiry.findOne({
+      where: {
+        [Op.or]: [
+          { email: email.toLowerCase() },
+          { phone: phoneDigits }
+        ]
+      }
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        message: existing.email === email.toLowerCase()
+          ? 'An account with this email already exists'
+          : 'An account with this phone number already exists'
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create enquiry record
+    const enquiry = await Enquiry.create({
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      phone: phoneDigits,
+      password: hashedPassword,
+      candidateStatus: 'enquiry stage',
+      globalUser: true,
+      passwordChanged: true,
+    });
+
+    // Generate JWT token (same as login)
+    const token = await signToken({
+      userId: enquiry.id,
+      name: enquiry.name,
+      email: enquiry.email,
+      role: 'student'
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Signup successful',
+      token,
+      name: enquiry.name,
+      email: enquiry.email,
+    });
+  } catch (error) {
+    console.error('Error in enquiryStudentSignup:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+/**
  * ENQUIRY STUDENT LOGIN
  * Students with candidateStatus 'class' or 'class qualified' can login with email
  */
 exports.enquiryStudentLogin = async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, password } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ message: 'Email is required' });
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    // Find enquiry with valid status (class or class qualified)
-    const enquiry = await Enquiry.findOne({
-      where: {
-        email,
-        candidateStatus: ['class', 'class qualified']
-      },
-      include: [
-        {
-          model: Batch,
-          as: 'batch',
-          attributes: ['id', 'name', 'code', 'batchStartDate', 'sessionTime', 'sessionLink']
-        },
-        {
-          model: Package,
-          as: 'package',
-          attributes: ['id', 'name', 'description', 'price', 'duration']
-        }
-      ]
-    });
+    // Find enquiry by email first (to validate password before checking status)
+    const enquiry = await Enquiry.findOne({ where: { email } });
 
     if (!enquiry) {
-      return res.status(401).json({
-        message: 'Invalid credentials or enrollment not active. Only students with "class" or "class qualified" status can login.'
-      });
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
+
+    // Validate password using the model's comparePassword method
+    const isPasswordValid = await enquiry.comparePassword(password);
+    console.log(isPasswordValid);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    // // Check candidateStatus after password is verified
+    // if (!['class', 'class qualified'].includes(enquiry.candidateStatus)) {
+    //   return res.status(403).json({
+    //     message: 'Enrollment not active. Only students with "class" or "class qualified" status can login.'
+    //   });
+    // }
 
     // Generate JWT token for enquiry student
     const token = await signToken({
-      enquiryId: enquiry.id,
+      userId: enquiry.id,
       name: enquiry.name,
       email: enquiry.email,
-      candidateStatus: enquiry.candidateStatus,
-      type: 'enquiry_student'
+      role: 'student'
     });
 
     return res.status(200).json({
       success: true,
       message: 'Login successful',
       token,
-      student: {
-        id: enquiry.id,
-        name: enquiry.name,
-        email: enquiry.email,
-        phone: enquiry.phone,
-        candidateStatus: enquiry.candidateStatus
-      }
+      name: enquiry.name,
+      email: enquiry.email,
     });
   } catch (error) {
     console.error('Error in enquiryStudentLogin:', error);
@@ -85,7 +167,7 @@ exports.enquiryStudentLogin = async (req, res) => {
  */
 exports.getStudentClassroom = async (req, res) => {
   try {
-    const enquiryId = req.enquiry?.id;
+    const enquiryId = req.enquiry?.enquiryId;
 
     if (!enquiryId) {
       return res.status(401).json({ message: 'Enquiry ID not found in token' });
@@ -97,7 +179,7 @@ exports.getStudentClassroom = async (req, res) => {
         {
           model: Batch,
           as: 'batch',
-          attributes: ['id', 'name', 'code', 'batchStartDate', 'sessionTime', 'sessionLink', 'numberOfStudents'],
+          attributes: ['id', 'name', 'code', 'sessionDate', 'sessionTime', 'sessionLink', 'numberOfStudents'],
           include: [
             {
               model: Subject,
@@ -114,7 +196,7 @@ exports.getStudentClassroom = async (req, res) => {
         {
           model: Package,
           as: 'package',
-          attributes: ['id', 'name', 'description', 'price', 'duration', 'image'],
+          attributes: ['id', 'name', 'image'],
           include: [
             {
               model: Subject,
@@ -161,9 +243,6 @@ exports.getStudentClassroom = async (req, res) => {
       packageInfo = {
         packageId: enquiry.packageId,
         packageName: enquiry.package.name,
-        packageDescription: enquiry.package.description,
-        packagePrice: enquiry.package.price,
-        packageDuration: enquiry.package.duration,
         packageImage: enquiry.package.image,
         packageSubjects: enquiry.package.Subjects || [],
         totalPackageSubjects: enquiry.package.Subjects?.length || 0
@@ -210,7 +289,7 @@ exports.getStudentClassroom = async (req, res) => {
       id: enquiry.batch.id,
       name: enquiry.batch.name,
       code: enquiry.batch.code,
-      startDate: enquiry.batch.batchStartDate,
+      startDate: enquiry.batch.sessionDate,
       timing: enquiry.batch.sessionTime,
       sessionLink: enquiry.batch.sessionLink,
       totalStudents: enquiry.batch.numberOfStudents,
@@ -355,7 +434,7 @@ exports.getStudentClassroom = async (req, res) => {
  */
 exports.getClassmates = async (req, res) => {
   try {
-    const enquiryId = req.enquiry?.id;
+    const enquiryId = req.enquiry?.enquiryId;
 
     const enquiry = await Enquiry.findByPk(enquiryId, {
       attributes: ['batchId'],
@@ -407,7 +486,7 @@ exports.getClassmates = async (req, res) => {
  */
 exports.getEnrollmentDetails = async (req, res) => {
   try {
-    const enquiryId = req.enquiry?.id;
+    const enquiryId = req.enquiry?.enquiryId;
 
     const enquiry = await Enquiry.findByPk(enquiryId, {
       attributes: ['id', 'name', 'email', 'packageId', 'subjectIds', 'batchId'],
@@ -415,7 +494,7 @@ exports.getEnrollmentDetails = async (req, res) => {
         {
           model: Package,
           as: 'package',
-          attributes: ['id', 'name', 'description', 'price', 'duration', 'image'],
+          attributes: ['id', 'name', 'image'],
           include: [
             {
               model: Subject,
@@ -427,7 +506,7 @@ exports.getEnrollmentDetails = async (req, res) => {
         {
           model: Batch,
           as: 'batch',
-          attributes: ['id', 'name', 'code', 'batchStartDate']
+          attributes: ['id', 'name', 'code', 'sessionDate']
         }
       ]
     });
@@ -445,9 +524,6 @@ exports.getEnrollmentDetails = async (req, res) => {
       packageEnrollment = {
         packageId: enquiry.package.id,
         packageName: enquiry.package.name,
-        packageDescription: enquiry.package.description,
-        packagePrice: enquiry.package.price,
-        packageDuration: enquiry.package.duration,
         packageImage: enquiry.package.image,
         packageSubjects: enquiry.package.Subjects,
         totalPackageSubjects: enquiry.package.Subjects?.length || 0

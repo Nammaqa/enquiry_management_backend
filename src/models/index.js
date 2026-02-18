@@ -24,7 +24,7 @@ db.Material = require('./material')(sequelize, DataTypes);
 db.Feedback = require('./feedback')(sequelize, DataTypes);
 db.Announcement = require('./announcement')(sequelize, DataTypes);
 db.BatchStudent = require('./batchstudent')(sequelize, DataTypes);
-db.ClassFeed = require('./classfeed')(sequelize, DataTypes);
+
 db.InstructorSubject = require('./instructorsubject')(sequelize, DataTypes);
 db.Attendance = require('./attendance')(sequelize, DataTypes);
 db.Placement = require('./userplacementdetails')(sequelize, DataTypes);
@@ -445,27 +445,9 @@ db.AssignmentResponse.belongsTo(db.User, {
 	as: 'reviewer',
 });
 
-// ONE-TO-MANY: Batch has many ClassFeeds
-db.Batch.hasMany(db.ClassFeed, {
-	foreignKey: 'batchId',
-	onDelete: 'CASCADE',
-	as: 'classfeeds',
-});
-db.ClassFeed.belongsTo(db.Batch, {
-	foreignKey: 'batchId',
-	as: 'batch',
-});
 
-// ONE-TO-MANY: Subject has many ClassFeeds
-db.Subject.hasMany(db.ClassFeed, {
-	foreignKey: 'subjectId',
-	onDelete: 'CASCADE',
-	as: 'classfeeds',
-});
-db.ClassFeed.belongsTo(db.Subject, {
-	foreignKey: 'subjectId',
-	as: 'subject',
-});
+
+
 
 // Many-to-many: Instructor teaches many Subjects
 db.User.belongsToMany(db.Subject, {

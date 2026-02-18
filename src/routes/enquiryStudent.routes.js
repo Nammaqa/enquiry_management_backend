@@ -4,6 +4,12 @@ const enquiryStudentController = require('../controllers/enquiryStudent.controll
 const enquiryAuth = require('../middlewares/enquiryAuth.middleware');
 
 /**
+ * PUBLIC ROUTE - Student Signup
+ * POST /api/enquiry-students/signup
+ */
+router.post('/signup', enquiryStudentController.enquiryStudentSignup);
+
+/**
  * PUBLIC ROUTE - Student Login
  * POST /api/enquiry-students/login
  */

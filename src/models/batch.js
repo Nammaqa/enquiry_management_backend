@@ -9,7 +9,7 @@ module.exports = (sequelize, DataTypes) => {
       sessionDate: DataTypes.DATE,
       sessionEndDate: DataTypes.DATE,
       sessionTime: DataTypes.STRING,
-      sessionQr: DataTypes.TEXT, // Use TEXT instead of STRING for base64 encoded data URL
+      sessionQr: DataTypes.TEXT, 
       numberOfStudents: {
         type: DataTypes.INTEGER,
         allowNull: true,
