@@ -22,7 +22,6 @@ db.AssignmentResponse = require('./assignmentresponse')(sequelize, DataTypes);
 db.MockInterview = require('./mockInterview')(sequelize, DataTypes);
 db.Material = require('./material')(sequelize, DataTypes);
 db.Feedback = require('./feedback')(sequelize, DataTypes);
-db.Announcement = require('./announcement')(sequelize, DataTypes);
 db.BatchStudent = require('./batchstudent')(sequelize, DataTypes);
 
 db.InstructorSubject = require('./instructorsubject')(sequelize, DataTypes);
@@ -377,28 +376,6 @@ db.Batch.hasMany(db.Feedback, {
 db.Feedback.belongsTo(db.Batch, {
 	foreignKey: 'batchId',
 	as: 'batch',
-});
-
-// ONE-TO-MANY: Batch has many Announcements
-db.Batch.hasMany(db.Announcement, {
-	foreignKey: 'batchId',
-	onDelete: 'CASCADE',
-	as: 'announcements',
-});
-db.Announcement.belongsTo(db.Batch, {
-	foreignKey: 'batchId',
-	as: 'batch',
-});
-
-// ONE-TO-MANY: User (Instructor) creates many Announcements
-db.User.hasMany(db.Announcement, {
-	foreignKey: 'instructorId',
-	onDelete: 'CASCADE',
-	as: 'announcements',
-});
-db.Announcement.belongsTo(db.User, {
-	foreignKey: 'instructorId',
-	as: 'instructor',
 });
 
 // ONE-TO-MANY: Assignment has many AssignmentResponses

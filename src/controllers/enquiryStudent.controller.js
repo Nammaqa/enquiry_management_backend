@@ -8,7 +8,6 @@ const Batch = db.Batch;
 const Package = db.Package;
 const Subject = db.Subject;
 const User = db.User;
-const Announcement = db.Announcement;
 const Assignment = db.Assignment;
 const Material = db.Material;
 const MockInterview = db.MockInterview;
@@ -86,7 +85,7 @@ exports.enquiryStudentSignup = async (req, res) => {
 
     // Generate JWT token (same as login)
     const token = await signToken({
-      userId: enquiry.id,
+      enquiryId: enquiry.id,
       name: enquiry.name,
       email: enquiry.email,
       role: 'student'
@@ -141,7 +140,7 @@ exports.enquiryStudentLogin = async (req, res) => {
 
     // Generate JWT token for enquiry student
     const token = await signToken({
-      userId: enquiry.id,
+      enquiryId: enquiry.id,
       name: enquiry.name,
       email: enquiry.email,
       role: 'student'
@@ -306,21 +305,6 @@ exports.getStudentClassroom = async (req, res) => {
     };
 
     if (enquiry.batchId) {
-      // Fetch announcements
-      const announcements = await Announcement.findAll({
-        where: { batchId: enquiry.batchId },
-        attributes: ['id', 'title', 'description', 'content', 'createdAt'],
-        include: [
-          {
-            model: User,
-            as: 'instructor',
-            attributes: ['id', 'name', 'email']
-          }
-        ],
-        order: [['createdAt', 'DESC']],
-        limit: 10
-      });
-
       // Fetch assignments for this batch
       const assignments = await Assignment.findAll({
         where: { batchId: enquiry.batchId },
@@ -380,10 +364,6 @@ exports.getStudentClassroom = async (req, res) => {
       });
 
       batchContent = {
-        announcements: {
-          count: announcements.length,
-          items: announcements
-        },
         assignments: {
           count: assignments.length,
           items: assignments

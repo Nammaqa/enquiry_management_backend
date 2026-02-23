@@ -24,7 +24,7 @@ exports.createOrUpdateBilling = async (req, res) => {
     const enquiry = await Enquiry.findByPk(enquiryId);
     if (!enquiry) {
       return res.status(404).json({ message: 'Enquiry not found' });
-    }
+    }                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
 
     // Calculate balance: packageCost - discount - amountPaid
     const finalDiscount = discount || 0;

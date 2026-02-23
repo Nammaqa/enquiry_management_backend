@@ -1,56 +1,50 @@
 const express = require('express');
 const router = express.Router();
 const assignmentResponseController = require('../controllers/assignmentresponse.controller');
-const auth = require('../middlewares/auth.middleware');
+const enquiryAuth = require('../middlewares/enquiryAuth.middleware');
 
 /**
- * CREATE - Student submits assignment
- * POST /api/assignment-responses
+ * @route   POST /api/assignment-responses
+ * @desc    Student submits an assignment response with multiple files.
+ * @access  Private (Enquiry Student JWT)
  */
 router.post(
   '/',
-  auth,
+  enquiryAuth,
   assignmentResponseController.createAssignmentResponse
 );
 
 /**
- * READ - Get instructor comments by assignment ID
- * GET /api/assignment-responses/:assignmentId/comments
+ * @route   GET /api/assignment-responses/my-submissions
+ * @desc    Student retrieves their own assignment submission history.
+ * @access  Private (Enquiry Student JWT)
  */
 router.get(
-  '/:assignmentId/comments',
-  assignmentResponseController.getInstructorCommentsByAssignment
+  '/my-submissions',
+  enquiryAuth,
+  assignmentResponseController.getStudentSubmissions
 );
 
 /**
- * READ - Get assignment responses by batchId and subjectId
- * GET /api/assignment-responses/batch-subject
+ * @route   PUT /api/assignment-responses/:id
+ * @desc    Student updates their assignment response (notes/files).
+ * @access  Private (Enquiry Student JWT)
  */
-router.get(
-  '/batch-subject',
-  assignmentResponseController.getAssignmentResponsesByBatchAndSubject
+router.put(
+  '/:id',
+  enquiryAuth,
+  assignmentResponseController.updateStudentSubmission
 );
 
 /**
- * READ - Instructor view: Get all submissions for an assignment
- * GET /api/assignment-responses/instructor/submissions/:assignmentId
+ * @route   DELETE /api/assignment-responses/:id
+ * @desc    Student deletes their assignment response.
+ * @access  Private (Enquiry Student JWT)
  */
-router.get(
-  '/instructor/submissions/:assignmentId',
-  auth,
-  assignmentResponseController.getInstructorAssignmentSubmissions
+router.delete(
+  '/:id',
+  enquiryAuth,
+  assignmentResponseController.deleteStudentSubmission
 );
-
-/**
- * UPDATE - Instructor reviews/grades assignment
- * PUT /api/assignment-responses/:id
- */
-router.put('/:id', auth, assignmentResponseController.updateAssignmentResponse);
-
-/**
- * DELETE - Delete assignment response
- * DELETE /api/assignment-responses/:id
- */
-router.delete('/:id', auth, assignmentResponseController.deleteAssignmentResponse);
 
 module.exports = router;

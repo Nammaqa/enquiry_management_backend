@@ -12,7 +12,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         references: { model: 'batches', key: 'id' },
       },
-      // enquiryId removed: assignment responses are now batch-based only
+      enquiryId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: 'enquiries', key: 'id' },
+      },
       submittedOn: {
         type: DataTypes.DATE,
         allowNull: true,
@@ -21,8 +25,9 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-      submissionFile: {
-        type: DataTypes.STRING,
+      // submissionFiles: Stores multiple Cloudinary URLs as a JSON array
+      submissionFiles: {
+        type: DataTypes.JSON,
         allowNull: true,
       },
       status: {
