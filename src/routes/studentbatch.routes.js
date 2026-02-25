@@ -14,4 +14,9 @@ router.use(enquiryAuth);
  */
 router.get('/', studentBatchController.getStudentBatches);
 
+/**
+ * @access  Private (Student/Instructor/Staff)
+ */
+router.get('/:batchId/details', studentBatchController.getBatchDetails);
+
 module.exports = router;

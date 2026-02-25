@@ -292,6 +292,41 @@ exports.getBatchById = async (req, res) => {
   }
 };
 
+// Get Batch Details (including instructor and enrolled students)
+exports.getBatchDetails = async (req, res) => {
+  try {
+    const { batchId } = req.params;
+
+    const batch = await Batch.findByPk(batchId, {
+      include: [
+        {
+          model: db.User,
+          as: 'instructor',
+          attributes: ['id', 'name', 'email']
+        },
+        {
+          model: db.Enquiry,
+          as: 'enrolledStudents',
+          attributes: ['id', 'name', 'email', 'phone', 'candidateStatus'],
+          through: { attributes: [] } // Hide junction table fields
+        }
+      ]
+    });
+
+    if (!batch) {
+      return res.status(404).json({ message: 'Batch not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: batch
+    });
+  } catch (error) {
+    console.error('Error in getBatchDetails:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Update Batch (instructor updates go to pending, admin/counsellor can update freely)
 exports.updateBatch = async (req, res) => {
   const form = new Formidable({ multiples: false, maxFileSize: 50 * 1024 * 1024, keepExtensions: true });

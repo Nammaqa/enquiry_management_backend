@@ -72,6 +72,8 @@ app.use('/api/feedbacks', require('./routes/feedback.routes'));
 app.use('/api/instructor-subjects', require('./routes/instructorsubject.routes'));
 app.use('/api/student-batches', require('./routes/studentbatch.routes'));
 app.use('/api/class-feed', require('./routes/classfeed.routes'));
+app.use('/api/class-feedback', require('./routes/classFeedback.routes'));
+
 // app.use('/api/attendance', require('./routes/attendance.routes'));
 // app.use('/api/placements', require('./routes/placement.routes'));
 

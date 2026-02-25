@@ -59,6 +59,13 @@ router.get(
   batchController.getBatchById
 );
 
+// Get Batch Details (Instructor and Students)
+router.get(
+  '/:batchId/details',
+  auth,
+  batchController.getBatchDetails
+);
+
 // Update batch
 router.put(
   '/:batchId',
