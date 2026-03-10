@@ -7,8 +7,8 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health check endpoint
 app.get('/', (req, res) => {
@@ -75,7 +75,8 @@ app.use('/api/class-feed', require('./routes/classfeed.routes'));
 app.use('/api/class-feedback', require('./routes/classFeedback.routes'));
 
 app.use('/api/attendance', require('./routes/attendance.routes'));
-// app.use('/api/placements', require('./routes/placement.routes'));
+app.use('/api/job-posts', require('./routes/jobPost.routes'));
+app.use('/api/user-placement', require('./routes/userplacementdetails.routes'));
                                                                           
 
 

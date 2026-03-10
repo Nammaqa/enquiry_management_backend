@@ -37,4 +37,10 @@ router.get('/classmates', enquiryAuth, enquiryStudentController.getClassmates);
  */
 router.get('/enrollment', enquiryAuth, enquiryStudentController.getEnrollmentDetails);
 
+/**
+ * PUT update student profile
+ * PUT /api/enquiry-students/profile
+ */
+router.put('/profile', enquiryAuth, enquiryStudentController.updateStudentProfile);
+
 module.exports = router;

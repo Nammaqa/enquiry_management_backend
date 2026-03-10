@@ -1,14 +1,25 @@
-// const express = require('express');
-// const router = express.Router();
-// const placementController = require('../controllers/placement.controller');
+const express = require('express');
+const router = express.Router();
+const userPlacementController = require('../controllers/userplacementdetails.controller.js');
+const enquiryAuth = require('../middlewares/enquiryAuth.middleware');
+const auth = require('../middlewares/auth.middleware');
 
-// // POST: Create placement
-// router.post('/', placementController.createPlacement);
+// GET: Fetch all placement data (Admin/Instructor view)
+router.get('/all-placements', auth, userPlacementController.getAllPlacements);
 
-// // PUT: Update placement by id
-// router.put('/:id', placementController.updatePlacement);
+// POST: Save unified placement data (all tables)
+router.post('/unified', enquiryAuth, userPlacementController.saveUnifiedPlacementData);
 
-// // GET: Get placements (all, by enquiryId, or by id)
-// router.get('/', placementController.getPlacements);
+// PUT: Update unified placement data (replaces associations)
+router.put('/unified', enquiryAuth, userPlacementController.updateUnifiedPlacementData);
 
-// module.exports = router;
+// GET: Fetch unified placement data for the student
+router.get('/unified', enquiryAuth, userPlacementController.getUnifiedPlacementData);
+
+// Optional: Individual routes for granular access
+router.get('/work-experience', enquiryAuth, userPlacementController.getWorkExperiences);
+router.get('/higher-education', enquiryAuth, userPlacementController.getHigherEducations);
+router.get('/certification', enquiryAuth, userPlacementController.getCertifications);
+router.get('/projects', enquiryAuth, userPlacementController.getProjects);
+
+module.exports = router;

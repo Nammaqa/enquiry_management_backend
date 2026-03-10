@@ -22,6 +22,7 @@ db.AssignmentResponse = require('./assignmentresponse')(sequelize, DataTypes);
 db.MockInterview = require('./mockInterview')(sequelize, DataTypes);
 db.Material = require('./material')(sequelize, DataTypes);
 db.Feedback = require('./feedback')(sequelize, DataTypes);
+db.JobPost = require('./jobPost')(sequelize, DataTypes);
 db.BatchStudent = require('./batchstudent')(sequelize, DataTypes);
 db.InstructorSubject = require('./instructorsubject')(sequelize, DataTypes);
 db.Attendance = require('./attendance')(sequelize, DataTypes);

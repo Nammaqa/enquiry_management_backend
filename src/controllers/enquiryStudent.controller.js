@@ -564,3 +564,58 @@ exports.getEnrollmentDetails = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+/**
+ * UPDATE STUDENT PROFILE
+ * Allows students to update their own personal details
+ */
+exports.updateStudentProfile = async (req, res) => {
+  try {
+    const enquiryId = req.enquiry?.enquiryId;
+
+    if (!enquiryId) {
+      return res.status(401).json({ message: 'Enquiry ID not found in token' });
+    }
+
+    const enquiry = await Enquiry.findByPk(enquiryId);
+    if (!enquiry) {
+      return res.status(404).json({ message: 'Student record not found' });
+    }
+
+    const {
+      name,
+      current_location,
+      profession,
+      qualification,
+      experience
+    } = req.body;
+
+    const updateData = {};
+    if (name !== undefined) updateData.name = name.trim();
+    if (current_location !== undefined) updateData.current_location = current_location?.trim() || null;
+    if (profession !== undefined) updateData.profession = profession?.trim() || null;
+    if (qualification !== undefined) updateData.qualification = qualification?.trim() || null;
+    if (experience !== undefined) updateData.experience = experience?.trim() || null;
+
+    await enquiry.update(updateData);
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: {
+        id: enquiry.id,
+        name: enquiry.name,
+        email: enquiry.email,
+        phone: enquiry.phone,
+        current_location: enquiry.current_location,
+        profession: enquiry.profession,
+        qualification: enquiry.qualification,
+        experience: enquiry.experience,
+        updatedAt: enquiry.updatedAt
+      }
+    });
+  } catch (error) {
+    console.error('Error in updateStudentProfile:', error);
+    res.status(500).json({ message: error.message });
+  }
+};

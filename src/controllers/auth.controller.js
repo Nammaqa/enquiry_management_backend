@@ -5,6 +5,10 @@ const { signToken } = require('../config/jwt');
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
 
     const user = await User.findOne({ where: { email } });
     if (!user) {
@@ -33,7 +37,6 @@ exports.login = async (req, res) => {
   } catch (error) {
     return res.status(500).json({ message: 'Server error' });
   }
-
 };
 
 exports.validateToken = async (req, res) => {
