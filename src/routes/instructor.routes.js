@@ -74,4 +74,11 @@ router.get(
   instructorController.getAssignmentsByBatch
 );
 
+// Get specific batch details for instructor
+router.get(
+  '/batch/:batchId/details',
+  auth,
+  instructorController.getBatchDetails
+);
+
 module.exports = router;

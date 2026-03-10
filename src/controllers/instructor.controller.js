@@ -75,7 +75,7 @@ exports.assignSubjectToInstructor = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in assignSubjectToInstructor:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: error.message,
       error: error.toString()
     });
@@ -87,7 +87,7 @@ exports.getMySubjects = async (req, res) => {
   try {
     const userId = req.user.id;
     const userRole = req.user.role;
-    
+
     // If admin or counsellor, return all subjects with instructor information
     if (userRole === 'ADMIN' || userRole === 'COUNSELLOR') {
       const subjects = await Subject.findAll({
@@ -104,7 +104,7 @@ exports.getMySubjects = async (req, res) => {
         data: subjects || [],
       });
     }
-    
+
     // If instructor, return only their assigned subjects
     const instructor = await User.findByPk(userId, {
       include: [{
@@ -154,7 +154,7 @@ exports.getSubjectDetail = async (req, res) => {
       return res.status(200).json({
         success: true,
         message: 'Subject details with all assigned instructors',
-        data: { 
+        data: {
           subject,
           instructors: subject.Users || [],
         },
@@ -745,3 +745,74 @@ exports.getAllInstructors = async (req, res) => {
     });
   }
 };
+
+// Get Specific Batch Details for Instructor
+// GET /api/instructor/batch/:batchId/details
+exports.getBatchDetails = async (req, res) => {
+  try {
+    const { batchId } = req.params;
+    const { userId, role } = req.user;
+
+    // Fetch batch details
+    const batch = await db.Batch.findByPk(batchId, {
+      include: [
+        {
+          model: db.User,
+          as: 'instructor',
+          attributes: ['id', 'name', 'email']
+        },
+        {
+          model: db.Enquiry,
+          as: 'enrolledStudents',
+          attributes: ['id', 'name', 'email', 'phone', 'candidateStatus'],
+          through: { attributes: [] }
+        }
+      ]
+    });
+
+    if (!batch) {
+      return res.status(404).json({
+        success: false,
+        message: 'Batch not found'
+      });
+    }
+
+    // Role-based access control
+    let isAuthorized = false;
+    if (role === 'ADMIN' || role === 'COUNSELLOR') {
+      isAuthorized = true;
+    } else if (role === 'INSTRUCTOR' || role === 'instructor') { // Check both to avoid case issues
+      // Instructor is allowed to view if they are the instructor for this batch, or the creator
+      if (String(batch.instructorId) === String(userId) || String(batch.createdBy) === String(userId)) {
+        isAuthorized = true;
+      }
+    }
+
+    if (!isAuthorized) {
+      console.warn('Instructor batch details access denied. Details:', {
+        role,
+        userId,
+        batchInstructorId: batch.instructorId,
+        batchCreatedBy: batch.createdBy
+      });
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You do not have permission to view this batch.'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: batch
+    });
+
+  } catch (error) {
+    console.error('Error fetching instructor batch details:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch batch details',
+      error: error.message
+    });
+  }
+};
+

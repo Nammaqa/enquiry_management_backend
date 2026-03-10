@@ -74,8 +74,10 @@ app.use('/api/student-batches', require('./routes/studentbatch.routes'));
 app.use('/api/class-feed', require('./routes/classfeed.routes'));
 app.use('/api/class-feedback', require('./routes/classFeedback.routes'));
 
-// app.use('/api/attendance', require('./routes/attendance.routes'));
+app.use('/api/attendance', require('./routes/attendance.routes'));
 // app.use('/api/placements', require('./routes/placement.routes'));
+                                                                          
+
 
 // 404 handler
 app.use((req, res) => {
@@ -86,4 +88,4 @@ app.use((req, res) => {
   });
 });
 
-module.exports = app;
+module.exports = app; 
