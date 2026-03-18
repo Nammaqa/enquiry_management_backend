@@ -22,4 +22,7 @@ router.get('/higher-education', enquiryAuth, userPlacementController.getHigherEd
 router.get('/certification', enquiryAuth, userPlacementController.getCertifications);
 router.get('/projects', enquiryAuth, userPlacementController.getProjects);
 
+// GET: Fetch recommended jobs based on skills
+router.get('/recommended-jobs', enquiryAuth, userPlacementController.getRecommendedJobs);
+
 module.exports = router;

@@ -99,6 +99,7 @@ exports.getAllSubjects = async (req, res) => {
       attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'createdAt', 'updatedAt'],
       include: {
         model: require('../models').Package,
+        as: 'packages',
         attributes: ['id', 'name', 'code'],
         through: { attributes: [] },
       },
@@ -150,6 +151,7 @@ exports.getSubjectsByInstructor = async (req, res) => {
       include: [
         {
           model: PackageModel,
+          as: 'packages',
           attributes: ['id', 'name', 'code'],
           through: { attributes: [] },
         },
@@ -182,6 +184,7 @@ exports.getSubjectById = async (req, res) => {
       attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'createdAt', 'updatedAt'],
       include: {
         model: require('../models').Package,
+        as: 'packages',
         attributes: ['id', 'name', 'code'],
         through: { attributes: [] },
       },

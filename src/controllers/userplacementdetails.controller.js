@@ -4,6 +4,8 @@ const {
   HigherEducation, 
   Certification, 
   Project,
+  JobPost,
+  StudentPlacementApplied,
   sequelize 
 } = require('../models');
 
@@ -392,6 +394,76 @@ exports.getProjects = async (req, res) => {
     const projs = await Project.findAll({ where });
     res.json(projs);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * Get Recommended Jobs for Student
+ * Matches JobPost technicalSkills with student's technicalSkills
+ */
+exports.getRecommendedJobs = async (req, res) => {
+  try {
+    const enquiryId = req.enquiry?.enquiryId;
+
+    if (!enquiryId) {
+      return res.status(401).json({ error: 'Unauthorized: Enquiry ID not found in token' });
+    }
+
+    // 1. Fetch student's placement details to get skills
+    const studentProfile = await Placement.findOne({
+      where: { enquiryId },
+      attributes: ['technicalSkills']
+    });
+
+    if (!studentProfile || !studentProfile.technicalSkills || studentProfile.technicalSkills.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No technical skills found in your profile. Please update your profile to see recommended jobs.',
+        data: []
+      });
+    }
+
+    const studentSkills = studentProfile.technicalSkills.map(s => s.toLowerCase().trim());
+
+    // 2. Fetch all job posts
+    const allJobs = await JobPost.findAll({
+      order: [['postedAt', 'DESC']]
+    });
+
+    // 3. Fetch current student's applications
+    const studentApplications = await StudentPlacementApplied.findAll({
+      where: { enquiryId },
+      attributes: ['jobPostId']
+    });
+
+    const appliedJobIds = new Set(studentApplications.map(app => app.jobPostId));
+
+    // 4. Perform matching
+    const recommendedJobs = allJobs.map(job => {
+      const jobSkills = Array.isArray(job.technicalSkills) ? job.technicalSkills : [];
+      const matchingSkills = jobSkills.filter(skill => 
+        studentSkills.includes(skill.toLowerCase().trim())
+      );
+
+      return {
+        ...job.get({ plain: true }),
+        matchCount: matchingSkills.length,
+        matchingSkills: matchingSkills,
+        userApplied: appliedJobIds.has(job.id)
+      };
+    })
+    .filter(job => job.matchCount > 0) // Only include jobs with at least one match
+    .sort((a, b) => b.matchCount - a.matchCount); // Sort by highest match count
+
+    res.status(200).json({
+      success: true,
+      total: recommendedJobs.length,
+      data: recommendedJobs
+    });
+
+  } catch (err) {
+    console.error('Get Recommended Jobs Error:', err);
     res.status(500).json({ error: err.message });
   }
 };

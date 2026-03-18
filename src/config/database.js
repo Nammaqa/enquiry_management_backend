@@ -24,9 +24,9 @@ const config = {
     },
   },
   pool: {
-    max: 2,
+    max: 10, // Increased from 2 to handle concurrent requests
     min: 0,
-    acquire: 30000,
+    acquire: 60000, // Increased to 60s
     idle: 10000,
   },
   logging: process.env.NODE_ENV === 'development' ? console.log : false,

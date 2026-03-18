@@ -73,12 +73,9 @@ app.use('/api/instructor-subjects', require('./routes/instructorsubject.routes')
 app.use('/api/student-batches', require('./routes/studentbatch.routes'));
 app.use('/api/class-feed', require('./routes/classfeed.routes'));
 app.use('/api/class-feedback', require('./routes/classFeedback.routes'));
-
 app.use('/api/attendance', require('./routes/attendance.routes'));
 app.use('/api/job-posts', require('./routes/jobPost.routes'));
 app.use('/api/user-placement', require('./routes/userplacementdetails.routes'));
-                                                                          
-
 
 // 404 handler
 app.use((req, res) => {

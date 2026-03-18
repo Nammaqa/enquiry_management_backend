@@ -38,6 +38,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      technicalSkills: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: [],
+      },
       postedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW,

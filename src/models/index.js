@@ -31,6 +31,7 @@ db.WorkExperience = require('./workexperience')(sequelize, DataTypes);
 db.HigherEducation = require('./highereducation')(sequelize, DataTypes);
 db.Certification = require('./certification')(sequelize, DataTypes);
 db.Project = require('./project')(sequelize, DataTypes);
+db.StudentPlacementApplied = require('./studentPlacementApplied')(sequelize, DataTypes);
 
 // ONE-TO-MANY: Placement has many WorkExperiences
 db.Placement.hasMany(db.WorkExperience, {
@@ -413,5 +414,29 @@ db.Attendance.belongsTo(db.User, {
 	foreignKey: 'instructorId',
 	as: 'instructor',
 });
+
+// MANY-TO-MANY: Package <-> Subject through PackageSubjects
+db.Package.belongsToMany(db.Subject, {
+	through: 'PackageSubjects',
+	foreignKey: 'packageId',
+	otherKey: 'subjectId',
+	as: 'subjects',
+});
+db.Subject.belongsToMany(db.Package, {
+	through: 'PackageSubjects',
+	foreignKey: 'subjectId',
+	otherKey: 'packageId',
+	as: 'packages',
+});
+
+// JOB APPLICATIONS
+db.Enquiry.hasMany(db.StudentPlacementApplied, { foreignKey: 'enquiryId', as: 'jobApplications' });
+db.StudentPlacementApplied.belongsTo(db.Enquiry, { foreignKey: 'enquiryId', as: 'enquiry' });
+
+db.JobPost.hasMany(db.StudentPlacementApplied, { foreignKey: 'jobPostId', as: 'applications' });
+db.StudentPlacementApplied.belongsTo(db.JobPost, { foreignKey: 'jobPostId', as: 'jobPost' });
+
+db.Placement.hasMany(db.StudentPlacementApplied, { foreignKey: 'userPlacementDetailId', as: 'jobApplications' });
+db.StudentPlacementApplied.belongsTo(db.Placement, { foreignKey: 'userPlacementDetailId', as: 'userPlacementDetail' });
 
 module.exports = db;

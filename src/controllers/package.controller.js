@@ -83,6 +83,7 @@ exports.createPackage = async (req, res) => {
     const pkgWithSubjects = await Package.findByPk(pkg.id, {
       include: {
         model: Subject,
+        as: 'subjects',
         attributes: ['id', 'name', 'code'],
         through: { attributes: [] },
       },
@@ -106,6 +107,7 @@ exports.getAllPackages = async (req, res) => {
     const packages = await Package.findAll({
       include: {
         model: Subject,
+        as: 'subjects',
         attributes: ['id', 'name', 'code'],
         through: { attributes: [] },
       },
@@ -125,6 +127,7 @@ exports.getPackageById = async (req, res) => {
     const pkg = await Package.findByPk(req.params.id, {
       include: {
         model: Subject,
+        as: 'subjects',
         attributes: ['id', 'name', 'code'],
         through: { attributes: [] },
       },
