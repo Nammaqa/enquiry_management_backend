@@ -4,11 +4,25 @@ const app = express();
 
 app.use(cors({
   origin: ['http://localhost:5173', 'http://localhost:5174', 'https://enquiry-node.vercel.app'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Logging middleware to trace all incoming requests
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  next();
+});
+
+// Diagnostic route
+app.patch('/api/test-patch', (req, res) => {
+  console.log('Test patch received');
+  res.status(200).json({ message: 'Patch connectivity confirmed', body: req.body });
+});
 
 // Health check endpoint
 app.get('/', (req, res) => {

@@ -25,6 +25,10 @@ module.exports = (sequelize, DataTypes) => {
     appliedStatus: {
       type: DataTypes.BOOLEAN,
       defaultValue: false
+    },
+    job_status: {
+      type: DataTypes.ENUM('in-progress', 'selected', 'rejected'),
+      defaultValue: 'in-progress'
     }
   }, {
     sequelize,

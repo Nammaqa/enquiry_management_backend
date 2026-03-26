@@ -6,6 +6,7 @@ const {
   Project,
   JobPost,
   StudentPlacementApplied,
+  Enquiry,
   sequelize 
 } = require('../models');
 
@@ -431,13 +432,15 @@ exports.getRecommendedJobs = async (req, res) => {
       order: [['postedAt', 'DESC']]
     });
 
-    // 3. Fetch current student's applications
+    // 3. Fetch current student's applications with statuses
     const studentApplications = await StudentPlacementApplied.findAll({
       where: { enquiryId },
-      attributes: ['jobPostId']
+      attributes: ['jobPostId', 'job_status']
     });
 
-    const appliedJobIds = new Set(studentApplications.map(app => app.jobPostId));
+    const applicationMap = new Map(
+      studentApplications.map(app => [app.jobPostId, app.job_status])
+    );
 
     // 4. Perform matching
     const recommendedJobs = allJobs.map(job => {
@@ -446,11 +449,14 @@ exports.getRecommendedJobs = async (req, res) => {
         studentSkills.includes(skill.toLowerCase().trim())
       );
 
+      const job_status = applicationMap.get(job.id) || null;
+
       return {
         ...job.get({ plain: true }),
         matchCount: matchingSkills.length,
         matchingSkills: matchingSkills,
-        userApplied: appliedJobIds.has(job.id)
+        userApplied: !!job_status,
+        job_status: job_status
       };
     })
     .filter(job => job.matchCount > 0) // Only include jobs with at least one match
@@ -464,6 +470,120 @@ exports.getRecommendedJobs = async (req, res) => {
 
   } catch (err) {
     console.error('Get Recommended Jobs Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * Get Student Applications
+ * Fetches all job applications for the authenticated student
+ */
+exports.getStudentApplications = async (req, res) => {
+  try {
+    const enquiryId = req.enquiry?.enquiryId;
+
+    if (!enquiryId) {
+      return res.status(401).json({ error: 'Unauthorized: Enquiry ID not found in token' });
+    }
+
+    const applications = await StudentPlacementApplied.findAll({
+      where: { enquiryId },
+      include: [
+        { 
+          model: JobPost, 
+          as: 'jobPost',
+          attributes: ['id', 'jobTitle', 'companyName', 'location', 'jobType', 'salaryRange', 'technicalSkills']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.status(200).json({
+      success: true,
+      total: applications.length,
+      data: applications
+    });
+  } catch (err) {
+    console.error('Get Student Applications Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * Get All Applications (Admin/HR/Counsellor view)
+ * Fetches all job applications in the system
+ */
+exports.getAllApplications = async (req, res) => {
+  try {
+    const applications = await StudentPlacementApplied.findAll({
+      include: [
+        { 
+          model: JobPost, 
+          as: 'jobPost',
+          attributes: ['id', 'jobTitle', 'companyName', 'location']
+        },
+        {
+          model: Enquiry,
+          as: 'enquiry',
+          attributes: ['id', 'name', 'email', 'phone']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.status(200).json({
+      success: true,
+      total: applications.length,
+      data: applications
+    });
+  } catch (err) {
+    console.error('Get All Applications Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * Update Application Job Status (HR/Admin)
+ * PATCH /api/user-placement/applications/:id/status
+ * Body: { job_status: 'selected' | 'rejected' | 'in-progress' }
+ */
+exports.updateApplicationStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { job_status } = req.body;
+
+    console.log('--- Update Application Status Debug ---');
+    console.log('ID:', id);
+    console.log('Job Status:', job_status);
+    console.log('Headers:', req.headers);
+
+    const allowed = ['in-progress', 'selected', 'rejected'];
+    if (!job_status || !allowed.includes(job_status)) {
+      return res.status(400).json({
+        error: `Invalid job_status. Allowed values: ${allowed.join(', ')}`
+      });
+    }
+
+    const application = await StudentPlacementApplied.findByPk(id);
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    await application.update({ job_status });
+
+    res.status(200).json({
+      success: true,
+      message: `Application status updated to "${job_status}"`,
+      data: {
+        id: application.id,
+        enquiryId: application.enquiryId,
+        jobPostId: application.jobPostId,
+        job_status: application.job_status
+      }
+    });
+  } catch (err) {
+    console.error('Update Application Status Error:', err);
     res.status(500).json({ error: err.message });
   }
 };

@@ -7,6 +7,9 @@ const auth = require('../middlewares/auth.middleware');
 // GET: Fetch all placement data (Admin/Instructor view)
 router.get('/all-placements', auth, userPlacementController.getAllPlacements);
 
+// GET: Fetch all job applications (Admin/HR/Counsellor view)
+router.get('/all-applications', auth, userPlacementController.getAllApplications);
+
 // POST: Save unified placement data (all tables)
 router.post('/unified', enquiryAuth, userPlacementController.saveUnifiedPlacementData);
 
@@ -24,5 +27,11 @@ router.get('/projects', enquiryAuth, userPlacementController.getProjects);
 
 // GET: Fetch recommended jobs based on skills
 router.get('/recommended-jobs', enquiryAuth, userPlacementController.getRecommendedJobs);
+
+// GET: Fetch all job applications for the student
+router.get('/applications', enquiryAuth, userPlacementController.getStudentApplications);
+
+// PATCH: Update job application status (HR/Admin - mark selected or rejected)
+router.patch('/applications/:id/status', auth, userPlacementController.updateApplicationStatus);
 
 module.exports = router;
