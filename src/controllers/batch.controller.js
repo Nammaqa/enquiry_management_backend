@@ -645,6 +645,7 @@ exports.getBatchStudentsforEnrollment = async (req, res) => {
           include: [
             {
               model: db.Subject,
+              as: 'subjects',
               attributes: ['id', 'name'],
               through: { attributes: [] },
               required: false

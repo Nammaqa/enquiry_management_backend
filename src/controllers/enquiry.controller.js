@@ -166,10 +166,42 @@ exports.createEnquiry = async (req, res) => {
 exports.getAllEnquiries = async (req, res) => {
   try {
     const enquiries = await Enquiry.findAll({
+      attributes: { exclude: ['password'] },
+      include: [
+        {
+          model: require('../models').Billing,
+          as: 'billing',
+          attributes: ['id', 'packageCost', 'amountPaid', 'discount', 'balance'],
+          required: false,
+        },
+      ],
       order: [['createdAt', 'DESC']],
     });
 
-    res.json(enquiries);
+    // Format response with payment status
+    const formattedEnquiries = enquiries.map(enquiry => {
+      const enquiryData = enquiry.toJSON();
+      let paymentStatus = 'not paid';
+
+      if (enquiryData.billing) {
+        const { amountPaid, balance, packageCost } = enquiryData.billing;
+        
+        if (balance === 0 || amountPaid >= packageCost) {
+          paymentStatus = 'fully paid';
+        } else if (amountPaid > 0 && balance > 0) {
+          paymentStatus = 'partially paid';
+        } else {
+          paymentStatus = 'not paid';
+        }
+      }
+
+      return {
+        ...enquiryData,
+        paymentStatus,
+      };
+    });
+
+    res.json(formattedEnquiries);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

@@ -84,6 +84,7 @@ exports.getBillingByEnquiryId = async (req, res) => {
       include: [
         {
           model: require('../models').Enquiry,
+          as: 'enquiry',
           attributes: ['id', 'name', 'email', 'phone'],
         },
       ],
@@ -111,6 +112,7 @@ exports.getAllBillings = async (req, res) => {
       include: [
         {
           model: require('../models').Enquiry,
+          as: 'enquiry',
           attributes: ['id', 'name', 'email', 'phone'],
         },
       ],
@@ -133,6 +135,7 @@ exports.getBillingById = async (req, res) => {
       include: [
         {
           model: require('../models').Enquiry,
+          as: 'enquiry',
           attributes: ['id', 'name', 'email', 'phone'],
         },
       ],

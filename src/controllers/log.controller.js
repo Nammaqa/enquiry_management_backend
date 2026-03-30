@@ -59,6 +59,7 @@ exports.getLogsByEnquiryId = async (req, res) => {
             include: [
                 {
                     model: require('../models').User,
+                    as: 'user',
                     attributes: ['id', 'email', 'role','name'],
                 },
             ],

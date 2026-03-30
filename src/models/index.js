@@ -382,6 +382,28 @@ db.Attendance.belongsTo(db.Enquiry, {
 	as: 'enquiry',
 });
 
+// ONE-TO-MANY: User creates many Logs
+db.User.hasMany(db.Log, {
+	foreignKey: 'userId',
+	onDelete: 'CASCADE',
+	as: 'logs',
+});
+db.Log.belongsTo(db.User, {
+	foreignKey: 'userId',
+	as: 'user',
+});
+
+// ONE-TO-MANY: Enquiry has many Logs
+db.Enquiry.hasMany(db.Log, {
+	foreignKey: 'enquiryId',
+	onDelete: 'CASCADE',
+	as: 'logs',
+});
+db.Log.belongsTo(db.Enquiry, {
+	foreignKey: 'enquiryId',
+	as: 'enquiry',
+});
+
 // ONE-TO-MANY: Batch has many Attendances
 db.Batch.hasMany(db.Attendance, {
 	foreignKey: 'batchId',
@@ -427,6 +449,17 @@ db.Subject.belongsToMany(db.Package, {
 	foreignKey: 'subjectId',
 	otherKey: 'packageId',
 	as: 'packages',
+});
+
+// ONE-TO-ONE: Enquiry has one Billing
+db.Enquiry.hasOne(db.Billing, {
+	foreignKey: 'enquiryId',
+	onDelete: 'CASCADE',
+	as: 'billing',
+});
+db.Billing.belongsTo(db.Enquiry, {
+	foreignKey: 'enquiryId',
+	as: 'enquiry',
 });
 
 // JOB APPLICATIONS
