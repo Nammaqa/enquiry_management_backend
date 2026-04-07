@@ -38,7 +38,7 @@ module.exports = (sequelize, DataTypes) => {
                 allowNull: true,
             },
             packageId: {
-                type: DataTypes.INTEGER,
+                type: DataTypes.INTEGER,         
                 allowNull: true,
                 references: {
                     model: 'packages',

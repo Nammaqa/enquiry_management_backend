@@ -3,6 +3,35 @@ const { uploadImage, deleteImage } = require('../utils/cloudinary');
 const { Formidable } = require('formidable');
 const fs = require('fs');
 
+const safeJsonParse = (data) => {
+  if (data === undefined || data === null) return null;
+  if (typeof data === 'object') return data;
+  try {
+    return JSON.parse(data);
+  } catch (e) {
+    return data;
+  }
+};
+
+const getFieldValue = (field) => {
+  if (field === undefined || field === null) return null;
+  if (Array.isArray(field)) return field[0];
+  return field;
+};
+
+const parseSubjectIds = (value) => {
+  if (value === undefined || value === null) return null;
+  let parsed = getFieldValue(value);
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch (e) {
+      parsed = parsed.split(',').map((id) => Number(id.trim())).filter(Boolean);
+    }
+  }
+  return Array.isArray(parsed) ? parsed.map((id) => Number(id)).filter((id) => !Number.isNaN(id)) : null;
+};
+
 /**
  * CREATE Package (ADMIN and COUNSELLOR)
  */
@@ -27,13 +56,13 @@ exports.createPackage = async (req, res) => {
     const [fields, files] = await form.parse(req);
 
     // Extract field values
-    const name = fields.name ? fields.name[0] : null;
-    const code = fields.code ? fields.code[0] : null;
-    const startDate = fields.startDate ? fields.startDate[0] : null;
-    const overview = fields.overview ? fields.overview[0] : null;
-    const syllabus = fields.syllabus ? fields.syllabus[0] : null;
-    const prerequisites = fields.prerequisites ? fields.prerequisites[0] : null;
-    const subjectIds = fields.subjectIds ? JSON.parse(fields.subjectIds[0]) : null;
+    const name = getFieldValue(fields.name);
+    const code = getFieldValue(fields.code);
+    const startDate = getFieldValue(fields.startDate);
+    const overview = getFieldValue(fields.overview);
+    const syllabus = getFieldValue(fields.syllabus);
+    const prerequisites = getFieldValue(fields.prerequisites);
+    const subjectIds = parseSubjectIds(fields.subjectIds);
 
     if (!name || !code) {
       return res.status(400).json({
@@ -70,9 +99,9 @@ exports.createPackage = async (req, res) => {
       code,
       startDate: startDate || null,
       image: imageUrl,
-      overview: overview ? JSON.parse(overview) : null,
-      syllabus: syllabus ? JSON.parse(syllabus) : null,
-      prerequisites: prerequisites ? JSON.parse(prerequisites) : null,
+      overview: safeJsonParse(overview),
+      syllabus: safeJsonParse(syllabus),
+      prerequisites: safeJsonParse(prerequisites),
     });
 
     if (subjectsArray.length > 0) {
@@ -178,13 +207,13 @@ exports.updatePackage = async (req, res) => {
     const [fields, files] = await form.parse(req);
 
     // Extract field values
-    const name = fields.name ? fields.name[0] : null;
-    const code = fields.code ? fields.code[0] : null;
-    const startDate = fields.startDate ? fields.startDate[0] : null;
-    const overview = fields.overview ? fields.overview[0] : null;
-    const syllabus = fields.syllabus ? fields.syllabus[0] : null;
-    const prerequisites = fields.prerequisites ? fields.prerequisites[0] : null;
-    const subjectIds = fields.subjectIds ? JSON.parse(fields.subjectIds[0]) : null;
+    const name = getFieldValue(fields.name);
+    const code = getFieldValue(fields.code);
+    const startDate = getFieldValue(fields.startDate);
+    const overview = getFieldValue(fields.overview);
+    const syllabus = getFieldValue(fields.syllabus);
+    const prerequisites = getFieldValue(fields.prerequisites);
+    const subjectIds = parseSubjectIds(fields.subjectIds);
 
     let imageUrl = pkg.image;
 
@@ -201,6 +230,17 @@ exports.updatePackage = async (req, res) => {
       const uploadResult = await uploadImage(fileBuffer, `package-${Date.now()}`);
       imageUrl = uploadResult.secure_url;
       await fs.promises.unlink(imageFile.filepath).catch(() => {});
+
+      // Delete old image if it exists
+      if (pkg.image) {
+        try {
+          const publicId = pkg.image.split('/').pop().split('.')[0];
+          await deleteImage(`enquiry_system/${publicId}`);
+        } catch (imageDeleteError) {
+          console.warn('Warning: Failed to delete old image from Cloudinary:', imageDeleteError.message);
+          // Continue with update even if old image deletion fails
+        }
+      }
     }
 
     // Validate and update subjects if provided
@@ -220,15 +260,16 @@ exports.updatePackage = async (req, res) => {
       code: code || pkg.code,
       startDate: startDate || pkg.startDate,
       image: imageUrl,
-      overview: overview ? JSON.parse(overview) : pkg.overview,
-      syllabus: syllabus ? JSON.parse(syllabus) : pkg.syllabus,
-      prerequisites: prerequisites ? JSON.parse(prerequisites) : pkg.prerequisites,
+      overview: overview !== undefined ? safeJsonParse(overview) : pkg.overview,
+      syllabus: syllabus !== undefined ? safeJsonParse(syllabus) : pkg.syllabus,
+      prerequisites: prerequisites !== undefined ? safeJsonParse(prerequisites) : pkg.prerequisites,
     });
 
     // Fetch with subjects for response
     const pkgWithSubjects = await Package.findByPk(pkg.id, {
       include: {
         model: Subject,
+        as: 'subjects',
         attributes: ['id', 'name', 'code'],
         through: { attributes: [] },
       },
@@ -266,19 +307,46 @@ exports.deletePackage = async (req, res) => {
       });
     }
 
-    // Delete image from Cloudinary if it exists
+    // Delete image from Cloudinary if it exists (non-blocking)
     if (pkg.image) {
-      const publicId = pkg.image.split('/').pop().split('.')[0];
-      await deleteImage(`enquiry_system/${publicId}`);
+      try {
+        const publicId = pkg.image.split('/').pop().split('.')[0];
+        await deleteImage(`enquiry_system/${publicId}`);
+      } catch (imageDeleteError) {
+        console.warn('Warning: Failed to delete image from Cloudinary:', imageDeleteError.message);
+        // Continue with package deletion even if image deletion fails
+      }
     }
 
-    await pkg.destroy();
+    try {
+      const db = require('../models');
+      
+      // Step 1: Clear all enquiries that reference this package (SET packageId to NULL)
+      // This removes the foreign key constraint blocking deletion
+      await db.sequelize.query(
+        'UPDATE enquiries SET "packageId" = NULL WHERE "packageId" = ?',
+        { replacements: [pkg.id] }
+      );
+
+      // Step 2: Clear all associated PackageSubjects
+      await pkg.setSubjects([]);
+      
+      // Step 3: Destroy the package record
+      await pkg.destroy();
+    } catch (destroyError) {
+      console.error('Error destroying package record:', destroyError.message, destroyError.stack);
+      throw destroyError;
+    }
 
     return res.status(200).json({
       message: 'Package deleted successfully',
     });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Server error' });
+    console.error('Error in deletePackage:', error.message, error.stack);
+    return res.status(500).json({ 
+      message: 'Server error',
+      error: error.message 
+      
+    });
   }
 };
