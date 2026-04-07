@@ -10,6 +10,7 @@
     "migrate:undo": "sequelize-cli db:migrate:undo",
     "seed": "sequelize-cli db:seed:all"
   },
+  
   "keywords": [],
   "author": "",
   "license": "ISC",
