@@ -16,31 +16,38 @@ router.post('/signup', enquiryStudentController.enquiryStudentSignup);
 router.post('/login', enquiryStudentController.enquiryStudentLogin);
 
 /**
+ * PUBLIC ROUTE - Token validation for enquiry students
+ * GET /api/enquiry-students/validate-token
+ */
+router.get('/validate-token', enquiryAuth, enquiryStudentController.validateToken);
+
+/**
  * PROTECTED ROUTES - Require Enquiry Student Authentication
  */
+router.use(enquiryAuth);
 
 /**
  * GET student classroom dashboard with batch, enrollment, and classmates
  * GET /api/enquiry-students/classroom
  */
-router.get('/classroom', enquiryAuth, enquiryStudentController.getStudentClassroom);
+router.get('/classroom', enquiryStudentController.getStudentClassroom);
 
 /**
  * GET list of classmates (other students in same batch)
  * GET /api/enquiry-students/classmates
  */
-router.get('/classmates', enquiryAuth, enquiryStudentController.getClassmates);
+router.get('/classmates', enquiryStudentController.getClassmates);
 
 /**
  * GET enrollment details (package or subjects taken)
  * GET /api/enquiry-students/enrollment
  */
-router.get('/enrollment', enquiryAuth, enquiryStudentController.getEnrollmentDetails);
+router.get('/enrollment', enquiryStudentController.getEnrollmentDetails);
 
 /**
  * PUT update student profile
  * PUT /api/enquiry-students/profile
  */
-router.put('/profile', enquiryAuth, enquiryStudentController.updateStudentProfile);
+router.put('/profile', enquiryStudentController.updateStudentProfile);
 
 module.exports = router;
