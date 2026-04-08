@@ -131,13 +131,6 @@ exports.enquiryStudentLogin = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // // Check candidateStatus after password is verified
-    // if (!['class', 'class qualified'].includes(enquiry.candidateStatus)) {
-    //   return res.status(403).json({
-    //     message: 'Enrollment not active. Only students with "class" or "class qualified" status can login.'
-    //   });
-    // }
-
     // Generate JWT token for enquiry student
     const token = await signToken({
       enquiryId: enquiry.id,
@@ -156,6 +149,34 @@ exports.enquiryStudentLogin = async (req, res) => {
   } catch (error) {
     console.error('Error in enquiryStudentLogin:', error);
     res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * VALIDATE ENQUIRY STUDENT TOKEN
+ * Returns basic student info if token is valid
+ */
+exports.validateToken = async (req, res) => {
+  try {
+    const enquiry = req.enquiry;
+
+    if (!enquiry) {
+      return res.status(401).json({ message: 'Invalid token' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Token is valid',
+      enquiry: {
+        enquiryId: enquiry.enquiryId,
+        name: enquiry.name,
+        email: enquiry.email,
+        role: enquiry.role,
+      }
+    });
+  } catch (error) {
+    console.error('Error in validateToken:', error);
+    return res.status(401).json({ message: 'Invalid token' });
   }
 };
 
