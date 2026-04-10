@@ -179,93 +179,132 @@ exports.getPackageById = async (req, res) => {
  * UPDATE package (ADMIN and COUNSELLOR)
  */
 exports.updatePackage = async (req, res) => {
+  const startTime = Date.now();
+  const transaction = await Package.sequelize.transaction();
+
   try {
     const userRole = req.user.role;
 
     // Only ADMIN and COUNSELLOR can update packages
     if (userRole !== 'ADMIN' && userRole !== 'COUNSELLOR') {
+      await transaction.rollback();
       return res.status(403).json({
         message: 'Access denied. Only Admin and Counsellor can update packages',
       });
     }
 
-    const pkg = await Package.findByPk(req.params.id);
+    const pkg = await Package.findByPk(req.params.id, { transaction });
 
     if (!pkg) {
+      await transaction.rollback();
       return res.status(404).json({
         message: 'Package not found',
       });
     }
 
-    // Parse form data using formidable
-    const form = new Formidable({
-      multiples: false,
-      maxFileSize: 10 * 1024 * 1024, // 10MB limit
-      keepExtensions: true
-    });
-
-    const [fields, files] = await form.parse(req);
-
-    // Extract field values
-    const name = getFieldValue(fields.name);
-    const code = getFieldValue(fields.code);
-    const startDate = getFieldValue(fields.startDate);
-    const overview = getFieldValue(fields.overview);
-    const syllabus = getFieldValue(fields.syllabus);
-    const prerequisites = getFieldValue(fields.prerequisites);
-    const subjectIds = parseSubjectIds(fields.subjectIds);
-
+    let updateData = {};
+    let subjectIds = null;
     let imageUrl = pkg.image;
 
-    // Handle image update
-    if (files.image && files.image.length > 0) {
-      // Delete old image if it exists
-      if (pkg.image) {
-        const publicId = pkg.image.split('/').pop().split('.')[0];
-        await deleteImage(`enquiry_system/${publicId}`);
-      }
+    // Check if request has files (multipart/form-data) or is JSON
+    if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
+      // Handle multipart form data with formidable
+      const form = new Formidable({
+        multiples: false,
+        maxFileSize: 10 * 1024 * 1024, // 10MB limit
+        keepExtensions: true
+      });
 
-      const imageFile = files.image[0];
-      const fileBuffer = await fs.promises.readFile(imageFile.filepath);
-      const uploadResult = await uploadImage(fileBuffer, `package-${Date.now()}`);
-      imageUrl = uploadResult.secure_url;
-      await fs.promises.unlink(imageFile.filepath).catch(() => {});
+      const [fields, files] = await form.parse(req);
 
-      // Delete old image if it exists
-      if (pkg.image) {
-        try {
-          const publicId = pkg.image.split('/').pop().split('.')[0];
-          await deleteImage(`enquiry_system/${publicId}`);
-        } catch (imageDeleteError) {
-          console.warn('Warning: Failed to delete old image from Cloudinary:', imageDeleteError.message);
-          // Continue with update even if old image deletion fails
+      // Extract field values
+      const name = getFieldValue(fields.name);
+      const code = getFieldValue(fields.code);
+      const startDate = getFieldValue(fields.startDate);
+      const overview = getFieldValue(fields.overview);
+      const syllabus = getFieldValue(fields.syllabus);
+      const prerequisites = getFieldValue(fields.prerequisites);
+      subjectIds = parseSubjectIds(fields.subjectIds);
+
+      // Handle image update
+      if (files.image && files.image.length > 0) {
+        const imageFile = files.image[0];
+        const fileBuffer = await fs.promises.readFile(imageFile.filepath);
+        const uploadResult = await uploadImage(fileBuffer, `package-${Date.now()}`);
+        imageUrl = uploadResult.secure_url;
+        await fs.promises.unlink(imageFile.filepath).catch(() => {});
+
+        // Delete old image if it exists
+        if (pkg.image) {
+          try {
+            const publicId = pkg.image.split('/').pop().split('.')[0];
+            await deleteImage(`enquiry_system/${publicId}`);
+          } catch (imageDeleteError) {
+            console.warn('Warning: Failed to delete old image from Cloudinary:', imageDeleteError.message);
+          }
         }
       }
+
+      // Build update data
+      if (name !== undefined) updateData.name = name;
+      if (code !== undefined) updateData.code = code;
+      if (startDate !== undefined) updateData.startDate = startDate;
+      if (overview !== undefined) updateData.overview = safeJsonParse(overview);
+      if (syllabus !== undefined) updateData.syllabus = safeJsonParse(syllabus);
+      if (prerequisites !== undefined) updateData.prerequisites = safeJsonParse(prerequisites);
+      updateData.image = imageUrl;
+
+    } else {
+      // Handle JSON request body
+      const { name, code, startDate, overview, syllabus, prerequisites, subjectIds: subjIds } = req.body;
+      subjectIds = subjIds;
+
+      // Build update data
+      if (name !== undefined) updateData.name = name;
+      if (code !== undefined) updateData.code = code;
+      if (startDate !== undefined) updateData.startDate = startDate;
+      if (overview !== undefined) updateData.overview = overview;
+      if (syllabus !== undefined) updateData.syllabus = syllabus;
+      if (prerequisites !== undefined) updateData.prerequisites = prerequisites;
+      updateData.image = imageUrl;
     }
 
     // Validate and update subjects if provided
-    if (subjectIds) {
+    if (subjectIds !== null && subjectIds !== undefined) {
       if (!Array.isArray(subjectIds) || subjectIds.length === 0) {
+        await transaction.rollback();
         return res.status(400).json({ message: 'subjectIds must be a non-empty array' });
       }
-      const foundSubjects = await Subject.findAll({ where: { id: subjectIds } });
+
+      const foundSubjects = await Subject.findAll({
+        where: { id: subjectIds },
+        transaction
+      });
+
       if (foundSubjects.length !== subjectIds.length) {
+        await transaction.rollback();
         return res.status(404).json({ message: 'One or more subjects not found' });
       }
-      await pkg.setSubjects(subjectIds);
+
+      // Get current subjects to check if they changed
+      const currentSubjects = await pkg.getSubjects({ transaction });
+      const currentSubjectIds = currentSubjects.map(s => s.id).sort();
+      const newSubjectIds = [...subjectIds].sort();
+
+      // Only update subjects if they actually changed
+      const subjectsChanged = currentSubjectIds.length !== newSubjectIds.length ||
+        !currentSubjectIds.every((id, index) => id === newSubjectIds[index]);
+
+      if (subjectsChanged) {
+        // Update subjects association within transaction
+        await pkg.setSubjects(subjectIds, { transaction });
+      }
     }
 
-    await pkg.update({
-      name: name || pkg.name,
-      code: code || pkg.code,
-      startDate: startDate || pkg.startDate,
-      image: imageUrl,
-      overview: overview !== undefined ? safeJsonParse(overview) : pkg.overview,
-      syllabus: syllabus !== undefined ? safeJsonParse(syllabus) : pkg.syllabus,
-      prerequisites: prerequisites !== undefined ? safeJsonParse(prerequisites) : pkg.prerequisites,
-    });
+    // Update package fields
+    await pkg.update(updateData, { transaction });
 
-    // Fetch with subjects for response
+    // Fetch with subjects for response (only if subjects were updated or always for consistency)
     const pkgWithSubjects = await Package.findByPk(pkg.id, {
       include: {
         model: Subject,
@@ -273,15 +312,23 @@ exports.updatePackage = async (req, res) => {
         attributes: ['id', 'name', 'code'],
         through: { attributes: [] },
       },
+      transaction
     });
+
+    await transaction.commit();
+
+    const duration = Date.now() - startTime;
+    console.log(`Package ${pkg.id} updated successfully in ${duration}ms`);
 
     return res.status(200).json({
       message: 'Package updated successfully',
       package: pkgWithSubjects,
     });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Server error' });
+    await transaction.rollback();
+    const duration = Date.now() - startTime;
+    console.error(`Package update failed after ${duration}ms:`, error.message);
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
