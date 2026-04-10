@@ -335,6 +335,13 @@ exports.updateBatch = async (req, res) => {
     const [fields, files] = await form.parse(req);
     const { batchId } = req.params;
 
+    // Helper function to validate date
+    const isValidDate = (dateString) => {
+      if (!dateString) return false;
+      const date = new Date(dateString);
+      return date instanceof Date && !isNaN(date);
+    };
+
     // Extract fields from formidable
     const name = fields.name ? fields.name[0] : null;
     const code = fields.code ? fields.code[0] : null;
@@ -367,11 +374,20 @@ exports.updateBatch = async (req, res) => {
       }
     }
 
+    // Validate dates before updating
+    if (sessionDate !== null && !isValidDate(sessionDate)) {
+      return res.status(400).json({ message: 'Invalid sessionDate format. Please provide a valid date.' });
+    }
+
+    if (sessionEndDate !== null && !isValidDate(sessionEndDate)) {
+      return res.status(400).json({ message: 'Invalid sessionEndDate format. Please provide a valid date.' });
+    }
+
     // Update fields
     if (name) batch.name = name;
     if (code) batch.code = code;
-    if (sessionDate) batch.sessionDate = sessionDate;
-    if (sessionEndDate !== undefined) batch.sessionEndDate = sessionEndDate;
+    if (sessionDate && isValidDate(sessionDate)) batch.sessionDate = sessionDate;
+    if (sessionEndDate && isValidDate(sessionEndDate)) batch.sessionEndDate = sessionEndDate;
     if (sessionTime) batch.sessionTime = sessionTime;
     if (status) batch.status = status;
     if (numberOfStudents !== undefined) batch.numberOfStudents = numberOfStudents;

@@ -1,5 +1,54 @@
 const { JobPost, HigherEducation, Placement, StudentPlacementApplied } = require('../models');
 
+// Valid enum values
+const VALID_WORK_MODES = ['Remote', 'On-site', 'Hybrid'];
+const VALID_JOB_TYPES = ['Full-time', 'Part-time', 'Internship', 'Contract'];
+
+/**
+ * Normalize and validate workMode enum value
+ */
+const normalizeWorkMode = (value) => {
+  if (!value) return null;
+  
+  const normalized = value.trim();
+  
+  // Direct match
+  if (VALID_WORK_MODES.includes(normalized)) {
+    return normalized;
+  }
+  
+  // Case-insensitive and format-flexible matching
+  const lowerValue = normalized.toLowerCase();
+  if (lowerValue === 'remote') return 'Remote';
+  if (lowerValue === 'onsite' || lowerValue === 'on-site' || lowerValue === 'on site') return 'On-site';
+  if (lowerValue === 'hybrid') return 'Hybrid';
+  
+  return null;
+};
+
+/**
+ * Normalize and validate jobType enum value
+ */
+const normalizeJobType = (value) => {
+  if (!value) return null;
+  
+  const normalized = value.trim();
+  
+  // Direct match
+  if (VALID_JOB_TYPES.includes(normalized)) {
+    return normalized;
+  }
+  
+  // Case-insensitive and format-flexible matching
+  const lowerValue = normalized.toLowerCase();
+  if (lowerValue === 'fulltime' || lowerValue === 'full-time' || lowerValue === 'full time') return 'Full-time';
+  if (lowerValue === 'parttime' || lowerValue === 'part-time' || lowerValue === 'part time') return 'Part-time';
+  if (lowerValue === 'internship') return 'Internship';
+  if (lowerValue === 'contract') return 'Contract';
+  
+  return null;
+};
+
 /**
  * Create a new Job Post
  */
@@ -22,7 +71,25 @@ const createJobPost = async (req, res) => {
     if (!companyName || !jobTitle || !location || !workMode || !jobType || !jobDescription) {
       return res.status(400).json({
         status: 'error',
-        message: 'Missing required fields',
+        message: 'Missing required fields: companyName, jobTitle, location, workMode, jobType, jobDescription',
+      });
+    }
+
+    // Normalize and validate workMode
+    const normalizedWorkMode = normalizeWorkMode(workMode);
+    if (!normalizedWorkMode) {
+      return res.status(400).json({
+        status: 'error',
+        message: `Invalid workMode. Must be one of: ${VALID_WORK_MODES.join(', ')}`,
+      });
+    }
+
+    // Normalize and validate jobType
+    const normalizedJobType = normalizeJobType(jobType);
+    if (!normalizedJobType) {
+      return res.status(400).json({
+        status: 'error',
+        message: `Invalid jobType. Must be one of: ${VALID_JOB_TYPES.join(', ')}`,
       });
     }
 
@@ -31,8 +98,8 @@ const createJobPost = async (req, res) => {
       companyLogo,
       jobTitle,
       location,
-      workMode,
-      jobType,
+      workMode: normalizedWorkMode,
+      jobType: normalizedJobType,
       about,
       jobDescription,
       preferredExperience,
@@ -42,6 +109,7 @@ const createJobPost = async (req, res) => {
 
     res.status(201).json({
       status: 'success',
+      message: 'Job post created successfully',
       data: jobPost,
     });
   } catch (error) {
@@ -124,10 +192,35 @@ const updateJobPost = async (req, res) => {
       });
     }
 
+    // Normalize workMode if provided
+    if (updateData.workMode) {
+      const normalizedWorkMode = normalizeWorkMode(updateData.workMode);
+      if (!normalizedWorkMode) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Invalid workMode. Must be one of: ${VALID_WORK_MODES.join(', ')}`,
+        });
+      }
+      updateData.workMode = normalizedWorkMode;
+    }
+
+    // Normalize jobType if provided
+    if (updateData.jobType) {
+      const normalizedJobType = normalizeJobType(updateData.jobType);
+      if (!normalizedJobType) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Invalid jobType. Must be one of: ${VALID_JOB_TYPES.join(', ')}`,
+        });
+      }
+      updateData.jobType = normalizedJobType;
+    }
+
     await jobPost.update(updateData);
 
     res.status(200).json({
       status: 'success',
+      message: 'Job post updated successfully',
       data: jobPost,
     });
   } catch (error) {

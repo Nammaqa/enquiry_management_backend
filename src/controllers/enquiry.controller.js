@@ -2,6 +2,23 @@ const { Enquiry } = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 
+const validateStringLength = (value, fieldName, maxLength) => {
+  if (!value) return null;
+  if (typeof value !== 'string') return `${fieldName} must be a string`;
+  if (value.trim().length > maxLength) {
+    return `${fieldName} must be at most ${maxLength} characters long`;
+  }
+  return null;
+};
+
+const parseDatabaseLengthError = (error) => {
+  const message = error?.message || '';
+  if (message.includes('value too long for type character varying')) {
+    return 'One or more fields exceed their maximum allowed length';
+  }
+  return null;
+};
+
 /**
  * CREATE Enquiry (ADMIN only)
  * Creates a new enquiry with all details: personal info, enrollment details, and preferences
@@ -52,6 +69,26 @@ exports.createEnquiry = async (req, res) => {
       });
     }
 
+    // Validate lengths for fixed-size fields
+    const fieldValidations = [
+      validateStringLength(name, 'Name', 100),
+      validateStringLength(phone.replace(/\D/g, ''), 'Phone number', 20),
+      validateStringLength(current_location, 'Current location', 100),
+      validateStringLength(profession, 'Profession', 100),
+      validateStringLength(qualification, 'Qualification', 100),
+      validateStringLength(experience, 'Experience', 50),
+      validateStringLength(trainingMode, 'Training mode', 50),
+      validateStringLength(trainingTime, 'Training time', 50),
+      validateStringLength(startTime, 'Start time', 50),
+      validateStringLength(referral, 'Referral', 100),
+    ].filter(Boolean);
+
+    if (fieldValidations.length > 0) {
+      return res.status(400).json({
+        message: fieldValidations[0]
+      });
+    }
+
     // Validate phone format (at least 10 digits)
     const phoneRegex = /^\d{10,}$/;
     if (!phoneRegex.test(phone.replace(/\D/g, ''))) {
@@ -61,20 +98,23 @@ exports.createEnquiry = async (req, res) => {
     }
 
     // Check for existing enquiry with same email or phone
-    const existing = await Enquiry.findOne({
-      where: {
-        [Op.or]: [
-          { email: email.toLowerCase() },
-          { phone: phone.replace(/\D/g, '') }
-        ]
-      }
-    });
+    const normalizedPhone = phone.replace(/\D/g, '');
+    const emailExists = await Enquiry.findOne({ where: { email: email.toLowerCase() } });
+    const phoneExists = await Enquiry.findOne({ where: { phone: normalizedPhone } });
 
-    if (existing) {
+    if (emailExists || phoneExists) {
+      if (emailExists && phoneExists) {
+        return res.status(400).json({
+          message: 'An enquiry with this email and phone number already exists'
+        });
+      }
+      if (emailExists) {
+        return res.status(400).json({
+          message: 'An enquiry with this email already exists'
+        });
+      }
       return res.status(400).json({
-        message: existing.email === email.toLowerCase()
-          ? 'An enquiry with this email already exists'
-          : 'An enquiry with this phone number already exists'
+        message: 'An enquiry with this phone number already exists'
       });
     }
 
@@ -152,6 +192,13 @@ exports.createEnquiry = async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating enquiry:', error);
+    const dbErrorMessage = parseDatabaseLengthError(error);
+    if (dbErrorMessage) {
+      return res.status(400).json({
+        success: false,
+        message: dbErrorMessage,
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Error creating enquiry',
@@ -264,6 +311,10 @@ exports.updateEnquiry = async (req, res) => {
       candidateStatus,
     } = req.body;
 
+    const normalizedPhone = phone?.replace(/\D/g, '');
+    let emailExists = null;
+    let phoneExists = null;
+
     // Validate email format if provided
     if (email && email !== enquiry.email) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -271,35 +322,42 @@ exports.updateEnquiry = async (req, res) => {
         return res.status(400).json({ message: 'Invalid email format' });
       }
 
-      // Check if email already exists in another record
-      const existing = await Enquiry.findOne({
+      emailExists = await Enquiry.findOne({
         where: {
           email: email.toLowerCase(),
           id: { [Op.ne]: enquiry.id }
         }
       });
-      if (existing) {
-        return res.status(400).json({ message: 'Email already exists in another enquiry' });
-      }
     }
 
-    // Validate phone format if provided
-    if (phone && phone !== enquiry.phone) {
+    // Validate phone format if provided and changed
+    if (normalizedPhone && normalizedPhone !== enquiry.phone) {
+      const phoneLengthError = validateStringLength(normalizedPhone, 'Phone number', 20);
+      if (phoneLengthError) {
+        return res.status(400).json({ message: phoneLengthError });
+      }
+
       const phoneRegex = /^\d{10,}$/;
-      if (!phoneRegex.test(phone.replace(/\D/g, ''))) {
+      if (!phoneRegex.test(normalizedPhone)) {
         return res.status(400).json({ message: 'Phone number must contain at least 10 digits' });
       }
 
-      // Check if phone already exists in another record
-      const existing = await Enquiry.findOne({
+      phoneExists = await Enquiry.findOne({
         where: {
-          phone: phone.replace(/\D/g, ''),
+          phone: normalizedPhone,
           id: { [Op.ne]: enquiry.id }
         }
       });
-      if (existing) {
-        return res.status(400).json({ message: 'Phone number already exists in another enquiry' });
+    }
+
+    if (emailExists || phoneExists) {
+      if (emailExists && phoneExists) {
+        return res.status(400).json({ message: 'Email and phone number already exist in another enquiry' });
       }
+      if (emailExists) {
+        return res.status(400).json({ message: 'Email already exists in another enquiry' });
+      }
+      return res.status(400).json({ message: 'Phone number already exists in another enquiry' });
     }
 
     // Validate candidateStatus if provided
@@ -310,6 +368,23 @@ exports.updateEnquiry = async (req, res) => {
           message: `Invalid candidate status. Allowed values: ${validStatuses.join(', ')}`
         });
       }
+    }
+
+    // Validate text field lengths on update
+    const lengthValidations = [
+      validateStringLength(name, 'Name', 100),
+      validateStringLength(current_location, 'Current location', 100),
+      validateStringLength(profession, 'Profession', 100),
+      validateStringLength(qualification, 'Qualification', 100),
+      validateStringLength(experience, 'Experience', 50),
+      validateStringLength(trainingMode, 'Training mode', 50),
+      validateStringLength(trainingTime, 'Training time', 50),
+      validateStringLength(startTime, 'Start time', 50),
+      validateStringLength(referral, 'Referral', 100),
+    ].filter(Boolean);
+
+    if (lengthValidations.length > 0) {
+      return res.status(400).json({ message: lengthValidations[0] });
     }
 
     // Validate subjectIds if provided
@@ -371,6 +446,13 @@ exports.updateEnquiry = async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating enquiry:', error);
+    const dbErrorMessage = parseDatabaseLengthError(error);
+    if (dbErrorMessage) {
+      return res.status(400).json({
+        success: false,
+        message: dbErrorMessage,
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Error updating enquiry',
