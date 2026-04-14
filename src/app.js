@@ -3,7 +3,7 @@ const cors = require('cors');
 const app = express();
 
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174', 'https://enquiry-node.vercel.app', 'https://nammaqa-enquiry.vercel.app', 'https://nammaqa-server.vercel.app',"https://devnammaenquiry.nammasoftware.com","https://devenquiry.nammasoftware.com"],
+  origin: ["*"],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
