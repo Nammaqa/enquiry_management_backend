@@ -14,7 +14,7 @@ exports.createBatch = async (req, res) => {
     // Extract fields from formidable
     const name = fields.name ? fields.name[0] : null;
     const code = fields.code ? fields.code[0] : null;
-    const sessionDate = fields.sessionDate ? fields.sessionDate[0] : null;
+    const sessionStartDate = fields.sessionStartDate ? fields.sessionStartDate[0] : null;
     const sessionEndDate = fields.sessionEndDate ? fields.sessionEndDate[0] : null;
     const sessionTime = fields.sessionTime ? fields.sessionTime[0] : null;
     const sessionLink = fields.sessionLink ? fields.sessionLink[0] : null;
@@ -37,9 +37,9 @@ exports.createBatch = async (req, res) => {
 
     console.log('Create batch request:', { name, code, subjectId, userRole, userId });
 
-    if (!name || !code || !sessionDate || !sessionTime) {
+    if (!name || !code || !sessionStartDate || !sessionTime) {
       return res.status(400).json({
-        message: 'name, code, sessionDate, and sessionTime are required',
+        message: 'name, code, sessionStartDate, and sessionTime are required',
       });
     }
 
@@ -67,7 +67,7 @@ exports.createBatch = async (req, res) => {
     const batch = await Batch.create({
       name,
       code,
-      sessionDate,
+      sessionStartDate,
       sessionEndDate: sessionEndDate || null,
       sessionTime,
       sessionLink: sessionLink || null,
@@ -345,7 +345,7 @@ exports.updateBatch = async (req, res) => {
     // Extract fields from formidable
     const name = fields.name ? fields.name[0] : null;
     const code = fields.code ? fields.code[0] : null;
-    const sessionDate = fields.sessionDate ? fields.sessionDate[0] : null;
+    const sessionStartDate = fields.sessionStartDate ? fields.sessionStartDate[0] : null;
     const sessionEndDate = fields.sessionEndDate ? fields.sessionEndDate[0] : null;
     const sessionTime = fields.sessionTime ? fields.sessionTime[0] : null;
     const sessionLink = fields.sessionLink ? fields.sessionLink[0] : null;
@@ -375,8 +375,8 @@ exports.updateBatch = async (req, res) => {
     }
 
     // Validate dates before updating
-    if (sessionDate !== null && !isValidDate(sessionDate)) {
-      return res.status(400).json({ message: 'Invalid sessionDate format. Please provide a valid date.' });
+    if (sessionStartDate !== null && !isValidDate(sessionStartDate)) {
+      return res.status(400).json({ message: 'Invalid sessionStartDate format. Please provide a valid date.' });
     }
 
     if (sessionEndDate !== null && !isValidDate(sessionEndDate)) {
@@ -386,7 +386,7 @@ exports.updateBatch = async (req, res) => {
     // Update fields
     if (name) batch.name = name;
     if (code) batch.code = code;
-    if (sessionDate && isValidDate(sessionDate)) batch.sessionDate = sessionDate;
+    if (sessionStartDate && isValidDate(sessionStartDate)) batch.sessionStartDate = sessionStartDate;
     if (sessionEndDate && isValidDate(sessionEndDate)) batch.sessionEndDate = sessionEndDate;
     if (sessionTime) batch.sessionTime = sessionTime;
     if (status) batch.status = status;

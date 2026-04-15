@@ -150,7 +150,7 @@ exports.getInstructorAssignments = async (req, res) => {
       include: [
         {
           model: Batch,
-          attributes: ['id', 'name', 'code', 'sessionDate', 'sessionTime', 'instructorId', 'subjectId'],
+          attributes: ['id', 'name', 'code', 'sessionStartDate', 'sessionTime', 'instructorId', 'subjectId'],
           as: 'batch',
         },
         {
@@ -289,7 +289,7 @@ exports.updateInstructorAssignment = async (req, res) => {
       include: [
         {
           model: Batch,
-          attributes: ['id', 'name', 'code', 'sessionDate', 'sessionTime', 'instructorId', 'subjectId'],
+          attributes: ['id', 'name', 'code', 'sessionStartDate', 'sessionTime', 'instructorId', 'subjectId'],
           as: 'batch',
         },
         {
