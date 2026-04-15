@@ -342,6 +342,7 @@ exports.updateBatch = async (req, res) => {
       return date instanceof Date && !isNaN(date);
     };
 
+    //live db  test
     // Extract fields from formidable
     const name = fields.name ? fields.name[0] : null;
     const code = fields.code ? fields.code[0] : null;
