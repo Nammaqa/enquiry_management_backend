@@ -596,7 +596,7 @@ exports.getBatchesBySubjectAndInstructor = async (req, res) => {
           attributes: ['id', 'name', 'email'],
         },
       ],
-      order: [['sessionDate', 'DESC']],
+      order: [['sessionStartDate', 'DESC']],
     });
 
     res.status(200).json({
