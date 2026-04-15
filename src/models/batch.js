@@ -6,7 +6,7 @@ module.exports = (sequelize, DataTypes) => {
       code: DataTypes.STRING,
       status: DataTypes.ENUM('yet to start', 'In progress', 'completed'),
       sessionLink: DataTypes.STRING,
-      sessionDate: DataTypes.DATE,
+      sessionStartDate: DataTypes.DATE,
       sessionEndDate: DataTypes.DATE,
       sessionTime: DataTypes.STRING,
       sessionQr: DataTypes.TEXT, 

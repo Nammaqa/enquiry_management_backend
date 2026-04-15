@@ -199,7 +199,7 @@ exports.getStudentClassroom = async (req, res) => {
         {
           model: Batch,
           as: 'batch',
-          attributes: ['id', 'name', 'code', 'sessionDate', 'sessionTime', 'sessionLink', 'numberOfStudents'],
+          attributes: ['id', 'name', 'code', 'sessionStartDate', 'sessionTime', 'sessionLink', 'numberOfStudents'],
           include: [
             {
               model: Subject,
@@ -309,7 +309,7 @@ exports.getStudentClassroom = async (req, res) => {
       id: enquiry.batch.id,
       name: enquiry.batch.name,
       code: enquiry.batch.code,
-      startDate: enquiry.batch.sessionDate,
+      startDate: enquiry.batch.sessionStartDate,
       timing: enquiry.batch.sessionTime,
       sessionLink: enquiry.batch.sessionLink,
       totalStudents: enquiry.batch.numberOfStudents,
@@ -507,7 +507,7 @@ exports.getEnrollmentDetails = async (req, res) => {
         {
           model: Batch,
           as: 'batch',
-          attributes: ['id', 'name', 'code', 'sessionDate']
+          attributes: ['id', 'name', 'code', 'sessionStartDate']
         }
       ]
     });
