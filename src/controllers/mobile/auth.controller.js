@@ -547,3 +547,45 @@ exports.login = async (req, res) => {
     });
   }
 };
+
+exports.checkUserExists = async (req, res) => {
+  try {
+    const { phone_number } = req.body;
+
+    // Validate required fields
+    if (!phone_number) {
+      return res.status(400).json({
+        message: 'Phone number is required',
+        exists: false,
+      });
+    }
+
+    // Check if user exists
+    const user = await User.findOne({ where: { phone_number } });
+
+    if (user) {
+      return res.status(200).json({
+        message: 'User exists',
+        exists: true,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone_number: user.phone_number,
+          role: user.role,
+        },
+      });
+    } else {
+      return res.status(200).json({
+        message: 'User does not exist',
+        exists: false,
+      });
+    }
+  } catch (error) {
+    console.error('Check user exists error:', error.message);
+    return res.status(500).json({
+      message: 'Server error',
+      error: error.message,
+    });
+  }
+};
