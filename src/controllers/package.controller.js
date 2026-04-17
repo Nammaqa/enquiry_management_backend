@@ -62,6 +62,7 @@ exports.createPackage = async (req, res) => {
     const overview = getFieldValue(fields.overview);
     const syllabus = getFieldValue(fields.syllabus);
     const prerequisites = getFieldValue(fields.prerequisites);
+    const fees = getFieldValue(fields.fees);
     const subjectIds = parseSubjectIds(fields.subjectIds);
 
     if (!name || !code) {
@@ -102,6 +103,7 @@ exports.createPackage = async (req, res) => {
       overview: safeJsonParse(overview),
       syllabus: safeJsonParse(syllabus),
       prerequisites: safeJsonParse(prerequisites),
+      fees: fees || null,
     });
 
     if (subjectsArray.length > 0) {
@@ -113,7 +115,7 @@ exports.createPackage = async (req, res) => {
       include: {
         model: Subject,
         as: 'subjects',
-        attributes: ['id', 'name', 'code'],
+        attributes: ['id', 'name', 'code', 'fees'],
         through: { attributes: [] },
       },
     });
@@ -134,10 +136,11 @@ exports.createPackage = async (req, res) => {
 exports.getAllPackages = async (req, res) => {
   try {
     const packages = await Package.findAll({
+      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
       include: {
         model: Subject,
         as: 'subjects',
-        attributes: ['id', 'name', 'code'],
+        attributes: ['id', 'name', 'code', 'fees'],
         through: { attributes: [] },
       },
     });
@@ -224,6 +227,7 @@ exports.updatePackage = async (req, res) => {
       const overview = getFieldValue(fields.overview);
       const syllabus = getFieldValue(fields.syllabus);
       const prerequisites = getFieldValue(fields.prerequisites);
+      const fees = getFieldValue(fields.fees);
       subjectIds = parseSubjectIds(fields.subjectIds);
 
       // Handle image update
@@ -252,11 +256,12 @@ exports.updatePackage = async (req, res) => {
       if (overview !== undefined) updateData.overview = safeJsonParse(overview);
       if (syllabus !== undefined) updateData.syllabus = safeJsonParse(syllabus);
       if (prerequisites !== undefined) updateData.prerequisites = safeJsonParse(prerequisites);
+      if (fees !== undefined) updateData.fees = fees;
       updateData.image = imageUrl;
 
     } else {
       // Handle JSON request body
-      const { name, code, startDate, overview, syllabus, prerequisites, subjectIds: subjIds } = req.body;
+      const { name, code, startDate, overview, syllabus, prerequisites, fees, subjectIds: subjIds } = req.body;
       subjectIds = subjIds;
 
       // Build update data
@@ -266,6 +271,7 @@ exports.updatePackage = async (req, res) => {
       if (overview !== undefined) updateData.overview = overview;
       if (syllabus !== undefined) updateData.syllabus = syllabus;
       if (prerequisites !== undefined) updateData.prerequisites = prerequisites;
+      if (fees !== undefined) updateData.fees = fees;
       updateData.image = imageUrl;
     }
 
@@ -309,7 +315,7 @@ exports.updatePackage = async (req, res) => {
       include: {
         model: Subject,
         as: 'subjects',
-        attributes: ['id', 'name', 'code'],
+        attributes: ['id', 'name', 'code', 'fees'],
         through: { attributes: [] },
       },
       transaction

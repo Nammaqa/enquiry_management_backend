@@ -32,6 +32,18 @@ db.HigherEducation = require('./highereducation')(sequelize, DataTypes);
 db.Certification = require('./certification')(sequelize, DataTypes);
 db.Project = require('./project')(sequelize, DataTypes);
 db.StudentPlacementApplied = require('./studentPlacementApplied')(sequelize, DataTypes);
+db.OTP = require('./otp')(sequelize, DataTypes);
+
+// ONE-TO-MANY: User has many OTPs
+db.User.hasMany(db.OTP, {
+	foreignKey: 'userId',
+	as: 'otps',
+	onDelete: 'SET NULL',
+});
+db.OTP.belongsTo(db.User, {
+	foreignKey: 'userId',
+	as: 'user',
+});
 
 // ONE-TO-MANY: Placement has many WorkExperiences
 db.Placement.hasMany(db.WorkExperience, {

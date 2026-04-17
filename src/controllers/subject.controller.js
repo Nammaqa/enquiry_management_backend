@@ -78,6 +78,7 @@ exports.createSubject = async (req, res) => {
       overview: safeJsonParse(overview),
       syllabus: safeJsonParse(syllabus),
       prerequisites: safeJsonParse(prerequisites),
+      fees: fees || null,
     });
 
     res.status(201).json({
@@ -96,11 +97,11 @@ exports.createSubject = async (req, res) => {
 exports.getAllSubjects = async (req, res) => {
   try {
     const subjects = await Subject.findAll({
-      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
       include: {
         model: require('../models').Package,
         as: 'packages',
-        attributes: ['id', 'name', 'code'],
+        attributes: ['id', 'name', 'code', 'fees'],
         through: { attributes: [] },
       },
     });
@@ -147,12 +148,12 @@ exports.getSubjectsByInstructor = async (req, res) => {
     // Find all subjects with those IDs
     const subjects = await Subject.findAll({
       where: { id: subjectIds },
-      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
       include: [
         {
           model: PackageModel,
           as: 'packages',
-          attributes: ['id', 'name', 'code'],
+          attributes: ['id', 'name', 'code', 'fees'],
           through: { attributes: [] },
         },
       ],
@@ -181,11 +182,11 @@ exports.getSubjectsByInstructor = async (req, res) => {
 exports.getSubjectById = async (req, res) => {
   try {
     const subject = await Subject.findByPk(req.params.id, {
-      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
       include: {
         model: require('../models').Package,
         as: 'packages',
-        attributes: ['id', 'name', 'code'],
+        attributes: ['id', 'name', 'code', 'fees'],
         through: { attributes: [] },
       },
     });
@@ -241,6 +242,7 @@ exports.updateSubject = async (req, res) => {
     const overview = fields.overview ? fields.overview[0] : null;
     const syllabus = fields.syllabus ? fields.syllabus[0] : null;
     const prerequisites = fields.prerequisites ? fields.prerequisites[0] : null;
+    const fees = fields.fees ? fields.fees[0] : null;
 
     let imageUrl = subject.image;
 
@@ -270,6 +272,7 @@ exports.updateSubject = async (req, res) => {
       overview: overview !== undefined ? safeJsonParse(overview) : subject.overview,
       syllabus: syllabus !== undefined ? safeJsonParse(syllabus) : subject.syllabus,
       prerequisites: prerequisites !== undefined ? safeJsonParse(prerequisites) : subject.prerequisites,
+      fees: fees !== undefined ? fees : subject.fees,
     });
 
     res.json({
