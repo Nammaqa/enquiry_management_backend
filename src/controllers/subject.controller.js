@@ -30,22 +30,38 @@ exports.createSubject = async (req, res) => {
       });
     }
 
-    // Parse form data using formidable
-    const form = new Formidable({ 
-      multiples: false,
-      maxFileSize: 10 * 1024 * 1024, // 10MB limit
-      keepExtensions: true
-    });
+    let fields;
+    let files = {};
 
-    const [fields, files] = await form.parse(req);
+    // Check if request has multipart form data or JSON
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('multipart/form-data')) {
+      // Parse form data using formidable
+      const form = new Formidable({ 
+        multiples: false,
+        maxFileSize: 10 * 1024 * 1024, // 10MB limit
+        keepExtensions: true
+      });
+
+      const [parsedFields, parsedFiles] = await form.parse(req);
+      fields = parsedFields;
+      files = parsedFiles;
+    } else {
+      // Handle JSON request body
+      fields = {};
+      for (const [key, value] of Object.entries(req.body)) {
+        fields[key] = [value]; // Convert to array format for consistency
+      }
+    }
 
     // Extract field values (formidable returns arrays for fields)
-    const name = fields.name ? fields.name[0] : null;
-    const code = fields.code ? fields.code[0] : null;
-    const startDate = fields.startDate ? fields.startDate[0] : null;
-    const overview = fields.overview ? fields.overview[0] : null;
-    const syllabus = fields.syllabus ? fields.syllabus[0] : null;
-    const prerequisites = fields.prerequisites ? fields.prerequisites[0] : null;
+    const name = fields.name ? (Array.isArray(fields.name) ? fields.name[0] : fields.name) : null;
+    const code = fields.code ? (Array.isArray(fields.code) ? fields.code[0] : fields.code) : null;
+    const startDate = fields.startDate ? (Array.isArray(fields.startDate) ? fields.startDate[0] : fields.startDate) : null;
+    const overview = fields.overview ? (Array.isArray(fields.overview) ? fields.overview[0] : fields.overview) : null;
+    const syllabus = fields.syllabus ? (Array.isArray(fields.syllabus) ? fields.syllabus[0] : fields.syllabus) : null;
+    const prerequisites = fields.prerequisites ? (Array.isArray(fields.prerequisites) ? fields.prerequisites[0] : fields.prerequisites) : null;
+    const fees = fields.fees ? (Array.isArray(fields.fees) ? fields.fees[0] : fields.fees) : null;
   
 
     if (!name || !code) {
@@ -226,23 +242,38 @@ exports.updateSubject = async (req, res) => {
       });
     }
 
-    // Parse form data using formidable
-    const form = new Formidable({ 
-      multiples: false,
-      maxFileSize: 10 * 1024 * 1024, // 10MB limit
-      keepExtensions: true
-    });
+    let fields;
+    let files = {};
 
-    const [fields, files] = await form.parse(req);
+    // Check if request has multipart form data or JSON
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('multipart/form-data')) {
+      // Parse form data using formidable
+      const form = new Formidable({ 
+        multiples: false,
+        maxFileSize: 10 * 1024 * 1024, // 10MB limit
+        keepExtensions: true
+      });
+
+      const [parsedFields, parsedFiles] = await form.parse(req);
+      fields = parsedFields;
+      files = parsedFiles;
+    } else {
+      // Handle JSON request body
+      fields = {};
+      for (const [key, value] of Object.entries(req.body)) {
+        fields[key] = [value]; // Convert to array format for consistency
+      }
+    }
 
     // Extract field values (formidable returns arrays for fields)
-    const name = fields.name ? fields.name[0] : null;
-    const code = fields.code ? fields.code[0] : null;
-    const startDate = fields.startDate ? fields.startDate[0] : null;
-    const overview = fields.overview ? fields.overview[0] : null;
-    const syllabus = fields.syllabus ? fields.syllabus[0] : null;
-    const prerequisites = fields.prerequisites ? fields.prerequisites[0] : null;
-    const fees = fields.fees ? fields.fees[0] : null;
+    const name = fields.name ? (Array.isArray(fields.name) ? fields.name[0] : fields.name) : null;
+    const code = fields.code ? (Array.isArray(fields.code) ? fields.code[0] : fields.code) : null;
+    const startDate = fields.startDate ? (Array.isArray(fields.startDate) ? fields.startDate[0] : fields.startDate) : null;
+    const overview = fields.overview ? (Array.isArray(fields.overview) ? fields.overview[0] : fields.overview) : null;
+    const syllabus = fields.syllabus ? (Array.isArray(fields.syllabus) ? fields.syllabus[0] : fields.syllabus) : null;
+    const prerequisites = fields.prerequisites ? (Array.isArray(fields.prerequisites) ? fields.prerequisites[0] : fields.prerequisites) : null;
+    const fees = fields.fees ? (Array.isArray(fields.fees) ? fields.fees[0] : fields.fees) : null;
 
     let imageUrl = subject.image;
 

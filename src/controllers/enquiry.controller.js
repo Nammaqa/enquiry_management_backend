@@ -281,10 +281,10 @@ exports.getEnquiryById = async (req, res) => {
  */
 exports.updateEnquiry = async (req, res) => {
   try {
-    // Check if user role is COUNSELLOR or ADMIN
+    // Check if user role is COUNSELLOR, ADMIN, or ACCOUNTS
     const userrole = req.user.role;
-    if (userrole !== 'COUNSELLOR' && userrole !== 'ADMIN') {
-      return res.status(403).json({ message: 'Only ADMIN and COUNSELLOR can edit enquiries' });
+    if (userrole !== 'COUNSELLOR' && userrole !== 'ADMIN' && userrole !== 'ACCOUNTS') {
+      return res.status(403).json({ message: 'You do not have permission to update enquiries. Please contact your administrator.' });
     }
 
     const enquiry = await Enquiry.findByPk(req.params.id);
@@ -501,6 +501,18 @@ exports.changeEnquiryStatus = async (req, res) => {
     if (newStatus === 'demo') {
       if (!['COUNSELLOR', 'ADMIN'].includes(userrole)) {
         return res.status(403).json({ message: 'Only COUNSELLOR or ADMIN can change status to demo' });
+      }
+    }
+    // Rule 1b: ACCOUNTS can move from demo back to enquiry stage
+    else if (currentStatus === 'demo' && newStatus === 'enquiry stage') {
+      if (!['ACCOUNTS', 'ADMIN'].includes(userrole)) {
+        return res.status(403).json({ message: 'Only ACCOUNTS or ADMIN can move from demo back to enquiry stage' });
+      }
+    }
+    // Rule 1c: ACCOUNTS can move from qualified demo back to enquiry stage
+    else if (currentStatus === 'qualified demo' && newStatus === 'enquiry stage') {
+      if (!['ACCOUNTS', 'ADMIN'].includes(userrole)) {
+        return res.status(403).json({ message: 'Only ACCOUNTS or ADMIN can move from qualified demo back to enquiry stage' });
       }
     }
     // Rule 2: COUNSELLOR or ADMIN can change status from demo to qualified demo
