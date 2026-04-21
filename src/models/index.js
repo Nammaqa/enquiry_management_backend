@@ -32,6 +32,7 @@ db.HigherEducation = require('./highereducation')(sequelize, DataTypes);
 db.Certification = require('./certification')(sequelize, DataTypes);
 db.Project = require('./project')(sequelize, DataTypes);
 db.StudentPlacementApplied = require('./studentPlacementApplied')(sequelize, DataTypes);
+db.Course = require('./course')(sequelize, DataTypes);
 
 // ONE-TO-MANY: Placement has many WorkExperiences
 db.Placement.hasMany(db.WorkExperience, {
