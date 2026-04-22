@@ -1,4 +1,4 @@
-const { Enquiry } = require('../models');
+const { Enquiry, Package, Subject, Billing } = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 
@@ -140,6 +140,31 @@ exports.createEnquiry = async (req, res) => {
       });
     }
 
+    // Validate package and subject selection
+    // At least one of packageId or subjectIds must be provided
+    if (!packageId && (!subjectIds || subjectIds.length === 0)) {
+      return res.status(400).json({
+        message: 'At least one of package or subject must be selected'
+      });
+    }
+
+    // If packageId is provided, check the package type
+    if (packageId) {
+      const pkg = await Package.findByPk(packageId);
+      if (!pkg) {
+        return res.status(404).json({
+          message: 'Package not found'
+        });
+      }
+
+      // If packageType is 'others', subjectIds is compulsory
+      if (pkg.packageType === 'others' && (!subjectIds || subjectIds.length === 0)) {
+        return res.status(400).json({
+          message: 'When selecting "others" package, selecting subject is compulsory'
+        });
+      }
+    }
+
     // Hash the default password before storing
     const hashedPassword = await bcrypt.hash('nammaqa@1', 10);
 
@@ -166,6 +191,41 @@ exports.createEnquiry = async (req, res) => {
       passwordChanged: false,
     });
 
+    // Calculate total fees from package and subjects
+    let totalFees = 0;
+
+    // Get package fees if packageId is provided
+    if (packageId) {
+      const pkg = await Package.findByPk(packageId, { attributes: ['fees'] });
+      if (pkg && pkg.fees) {
+        totalFees += pkg.fees;
+      }
+    }
+
+    // Get subject fees if subjectIds are provided
+    if (subjectIds && subjectIds.length > 0) {
+      const subjects = await Subject.findAll({
+        where: { id: subjectIds },
+        attributes: ['id', 'fees']
+      });
+      subjects.forEach(subject => {
+        if (subject.fees) {
+          totalFees += subject.fees;
+        }
+      });
+    }
+
+    // Create billing record with calculated total fees
+    if (totalFees > 0 || packageId || (subjectIds && subjectIds.length > 0)) {
+      await Billing.create({
+        enquiryId: enquiry.id,
+        packageCost: totalFees,
+        amountPaid: 0,
+        discount: 0,
+        balance: totalFees,
+      });
+    }
+
     res.status(201).json({
       success: true,
       message: 'Enquiry created successfully',
@@ -188,6 +248,7 @@ exports.createEnquiry = async (req, res) => {
         consent: enquiry.consent,
         candidateStatus: enquiry.candidateStatus,
         createdAt: enquiry.createdAt,
+        totalFees: totalFees,
       }
     });
   } catch (error) {
@@ -397,6 +458,35 @@ exports.updateEnquiry = async (req, res) => {
     // Validate consent if provided
     if (consent !== undefined && typeof consent !== 'boolean') {
       return res.status(400).json({ message: 'consent must be a boolean value' });
+    }
+
+    // Validate package and subject selection
+    // Determine the effective packageId and subjectIds after update
+    const effectivePackageId = packageId !== undefined ? packageId : enquiry.packageId;
+    const effectiveSubjectIds = subjectIds !== undefined ? subjectIds : enquiry.subjectIds;
+
+    // At least one of packageId or subjectIds must be provided
+    if (!effectivePackageId && (!effectiveSubjectIds || effectiveSubjectIds.length === 0)) {
+      return res.status(400).json({
+        message: 'At least one of package or subject must be selected'
+      });
+    }
+
+    // If packageId is provided or exists, check the package type
+    if (effectivePackageId) {
+      const pkg = await Package.findByPk(effectivePackageId);
+      if (!pkg) {
+        return res.status(404).json({
+          message: 'Package not found'
+        });
+      }
+
+      // If packageType is 'others', subjectIds is compulsory
+      if (pkg.packageType === 'others' && (!effectiveSubjectIds || effectiveSubjectIds.length === 0)) {
+        return res.status(400).json({
+          message: 'When selecting "others" package, selecting subject is compulsory'
+        });
+      }
     }
 
     // Update enquiry with trimmed and validated data
