@@ -40,7 +40,8 @@ app.get('/api/health', (req, res) => {
     message: 'API is healthy',
     timestamp: new Date().toISOString(),
     nodeEnv: process.env.NODE_ENV,
-    nodeVersion: process.version
+    nodeVersion: process.version,
+    databaseurl:process.env.DATABASE_URL
   });
 });
 
