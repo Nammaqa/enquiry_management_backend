@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const swaggerJsdoc = require('swagger-jsdoc');
+const swaggerUi = require('swagger-ui-express');
 const app = express();
 
 app.use(cors({
@@ -17,6 +19,37 @@ app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
+
+// Swagger setup
+const options = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'Enquiry Management API',
+      version: '1.0.0',
+      description: 'API for managing enquiries, users, batches, and more',
+    },
+    servers: [
+      {
+        url: 'http://localhost:3000',
+        description: 'Development server',
+      },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+      },
+    },
+  },
+  apis: ['./src/routes/*.js'], // Path to the API routes
+};
+
+const specs = swaggerJsdoc(options);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
 
 // Diagnostic route
@@ -92,6 +125,7 @@ app.use('/api/class-feedback', require('./routes/classFeedback.routes'));
 app.use('/api/attendance', require('./routes/attendance.routes'));
 app.use('/api/job-posts', require('./routes/jobPost.routes'));
 app.use('/api/user-placement', require('./routes/userplacementdetails.routes'));
+app.use('/api/courses', require('./routes/course.routes'));
 
 // 404 handler
 app.use((req, res) => {
@@ -102,4 +136,4 @@ app.use((req, res) => {
   });
 });
 
-module.exports = app; 
+module.exports = app;
