@@ -57,15 +57,38 @@ exports.createPackage = async (req, res) => {
         keepExtensions: true
       });
 
-    // Extract field values
-    const name = getFieldValue(fields.name);
-    const code = getFieldValue(fields.code);
-    const startDate = getFieldValue(fields.startDate);
-    const overview = getFieldValue(fields.overview);
-    const syllabus = getFieldValue(fields.syllabus);
-    const prerequisites = getFieldValue(fields.prerequisites);
-    const fees = getFieldValue(fields.fees);
-    const subjectIds = parseSubjectIds(fields.subjectIds);
+      const [fields, files] = await form.parse(req);
+
+      // Extract field values
+      name = getFieldValue(fields.name);
+      code = getFieldValue(fields.code);
+      startDate = getFieldValue(fields.startDate);
+      packageType = getFieldValue(fields.packageType);
+      overview = getFieldValue(fields.overview);
+      syllabus = getFieldValue(fields.syllabus);
+      prerequisites = getFieldValue(fields.prerequisites);
+      fees = getFieldValue(fields.fees);
+      subjectIds = parseSubjectIds(fields.subjectIds);
+
+      // Handle image upload if provided
+      if (files.image && files.image[0]) {
+        const imageFile = files.image[0];
+        const uploadResult = await uploadImage(imageFile.filepath);
+        imageUrl = uploadResult.secure_url;
+      }
+    } else {
+      // Handle JSON request
+      const { name: reqName, code: reqCode, startDate: reqStartDate, packageType: reqPackageType, overview: reqOverview, syllabus: reqSyllabus, prerequisites: reqPrerequisites, fees: reqFees, subjectIds: reqSubjectIds } = req.body;
+      name = reqName;
+      code = reqCode;
+      startDate = reqStartDate;
+      packageType = reqPackageType;
+      overview = reqOverview;
+      syllabus = reqSyllabus;
+      prerequisites = reqPrerequisites;
+      fees = reqFees;
+      subjectIds = reqSubjectIds;
+    }
 
     if (!name || !code) {
       return res.status(400).json({
