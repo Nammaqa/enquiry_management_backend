@@ -9,6 +9,7 @@ module.exports = (sequelize, DataTypes) => {
       syllabus: DataTypes.JSON,
       prerequisites: DataTypes.JSON,
       startDate: DataTypes.DATE,
+      fees:DataTypes.INTEGER
     },
     {
       tableName: 'subjects',

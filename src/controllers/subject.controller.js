@@ -31,7 +31,7 @@ exports.createSubject = async (req, res) => {
     }
 
     // Parse form data using formidable
-    const form = new Formidable({ 
+    const form = new Formidable({
       multiples: false,
       maxFileSize: 10 * 1024 * 1024, // 10MB limit
       keepExtensions: true
@@ -46,7 +46,8 @@ exports.createSubject = async (req, res) => {
     const overview = fields.overview ? fields.overview[0] : null;
     const syllabus = fields.syllabus ? fields.syllabus[0] : null;
     const prerequisites = fields.prerequisites ? fields.prerequisites[0] : null;
-  
+    const fees = fields.fees ? fields.fees[0] : null;
+
 
     if (!name || !code) {
       return res.status(400).json({
@@ -61,23 +62,24 @@ exports.createSubject = async (req, res) => {
     if (files.image && files.image.length > 0) {
       const imageFile = files.image[0];
       const fileBuffer = await fs.promises.readFile(imageFile.filepath);
-      
+
       const uploadResult = await uploadImage(fileBuffer, `subject-${Date.now()}`);
       imageUrl = uploadResult.secure_url;
       imagePublicId = uploadResult.public_id;
 
       // Clean up temporary file
-      await fs.promises.unlink(imageFile.filepath).catch(() => {});
+      await fs.promises.unlink(imageFile.filepath).catch(() => { });
     }
 
-    const subject = await Subject.create({ 
-      name, 
+    const subject = await Subject.create({
+      name,
       code,
       startDate: startDate || null,
       image: imageUrl,
       overview: safeJsonParse(overview),
       syllabus: safeJsonParse(syllabus),
       prerequisites: safeJsonParse(prerequisites),
+      fees: safeJsonParse(fees)
     });
 
     res.status(201).json({
@@ -96,7 +98,7 @@ exports.createSubject = async (req, res) => {
 exports.getAllSubjects = async (req, res) => {
   try {
     const subjects = await Subject.findAll({
-      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
       include: {
         model: require('../models').Package,
         as: 'packages',
@@ -115,7 +117,8 @@ exports.getAllSubjects = async (req, res) => {
  * GET subjects by instructor ID from token (ALL ROLES)
  */
 exports.getSubjectsByInstructor = async (req, res) => {
-  try {console.log('getSubjectsByInstructor called with user:', req.user);
+  try {
+    console.log('getSubjectsByInstructor called with user:', req.user);
     const instructorId = req.user.userId;
     const db = require('../models');
     const { InstructorSubject, Subject, Package: PackageModel } = db;
@@ -168,9 +171,9 @@ exports.getSubjectsByInstructor = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in getSubjectsByInstructor:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Server error',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -226,7 +229,7 @@ exports.updateSubject = async (req, res) => {
     }
 
     // Parse form data using formidable
-    const form = new Formidable({ 
+    const form = new Formidable({
       multiples: false,
       maxFileSize: 10 * 1024 * 1024, // 10MB limit
       keepExtensions: true
@@ -241,6 +244,7 @@ exports.updateSubject = async (req, res) => {
     const overview = fields.overview ? fields.overview[0] : null;
     const syllabus = fields.syllabus ? fields.syllabus[0] : null;
     const prerequisites = fields.prerequisites ? fields.prerequisites[0] : null;
+    const fees = fields.fees ? fields.fees[0] : null;
 
     let imageUrl = subject.image;
 
@@ -254,12 +258,12 @@ exports.updateSubject = async (req, res) => {
 
       const imageFile = files.image[0];
       const fileBuffer = await fs.promises.readFile(imageFile.filepath);
-      
+
       const uploadResult = await uploadImage(fileBuffer, `subject-${Date.now()}`);
       imageUrl = uploadResult.secure_url;
 
       // Clean up temporary file
-      await fs.promises.unlink(imageFile.filepath).catch(() => {});
+      await fs.promises.unlink(imageFile.filepath).catch(() => { });
     }
 
     await subject.update({
@@ -270,6 +274,7 @@ exports.updateSubject = async (req, res) => {
       overview: overview !== undefined ? safeJsonParse(overview) : subject.overview,
       syllabus: syllabus !== undefined ? safeJsonParse(syllabus) : subject.syllabus,
       prerequisites: prerequisites !== undefined ? safeJsonParse(prerequisites) : subject.prerequisites,
+      fees: fees !== undefined && fees !== null ? parseInt(fees, 10) : subject.fees,
     });
 
     res.json({
@@ -320,4 +325,62 @@ exports.deleteSubject = async (req, res) => {
     return res.status(500).json({ message: 'Server error' });
   }
 };
+
+/**
+ * GET subject fees by IDs list (ALL ROLES)
+ */
+exports.getSubjectFeesByIds = async (req, res) => {
+  try {
+    let subjectIds = [];
+
+    // Get IDs from query params or request body
+    if (req.query.ids) {
+      // Handle query string: ?ids=1,2,3 or ?ids=1&ids=2&ids=3
+      if (Array.isArray(req.query.ids)) {
+        subjectIds = req.query.ids.map(id => parseInt(id, 10)).filter(id => !Number.isNaN(id));
+      } else if (typeof req.query.ids === 'string') {
+        subjectIds = req.query.ids
+          .split(',')
+          .map(id => parseInt(id.trim(), 10))
+          .filter(id => !Number.isNaN(id));
+      }
+    } else if (req.body.ids) {
+      // Handle request body: { "ids": [1, 2, 3] }
+      if (Array.isArray(req.body.ids)) {
+        subjectIds = req.body.ids.map(id => parseInt(id, 10)).filter(id => !Number.isNaN(id));
+      }
+    }
+
+    if (!subjectIds || subjectIds.length === 0) {
+      return res.status(400).json({
+        message: 'At least one subject ID is required'
+      });
+    }
+
+    const subjects = await Subject.findAll({
+      where: {
+        id: subjectIds
+      },
+      attributes: ['id', 'name', 'code', 'fees']
+    });
+
+    if (subjects.length === 0) {
+      return res.status(404).json({
+        message: 'No subjects found with the provided IDs'
+      });
+    }
+
+    return res.status(200).json({
+      count: subjects.length,
+      data: subjects
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
 //formidable functions are async

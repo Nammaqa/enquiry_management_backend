@@ -46,23 +46,42 @@ exports.createPackage = async (req, res) => {
       });
     }
 
-    // Parse form data using formidable
-    const form = new Formidable({
-      multiples: false,
-      maxFileSize: 10 * 1024 * 1024, // 10MB limit
-      keepExtensions: true
-    });
+    let name, code, startDate, packageType, overview, syllabus, prerequisites, subjectIds, fees, imageUrl = null;
 
-    const [fields, files] = await form.parse(req);
+    // Check if request has files (multipart/form-data) or is JSON
+    if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
+      // Handle multipart form data with formidable
+      const form = new Formidable({
+        multiples: false,
+        maxFileSize: 10 * 1024 * 1024, // 10MB limit
+        keepExtensions: true
+      });
 
-    // Extract field values
-    const name = getFieldValue(fields.name);
-    const code = getFieldValue(fields.code);
-    const startDate = getFieldValue(fields.startDate);
-    const overview = getFieldValue(fields.overview);
-    const syllabus = getFieldValue(fields.syllabus);
-    const prerequisites = getFieldValue(fields.prerequisites);
-    const subjectIds = parseSubjectIds(fields.subjectIds);
+      const [fields, files] = await form.parse(req);
+
+      // Extract field values
+      name = getFieldValue(fields.name);
+      code = getFieldValue(fields.code);
+      startDate = getFieldValue(fields.startDate);
+      packageType = getFieldValue(fields.packageType) || 'standard';
+      overview = getFieldValue(fields.overview);
+      syllabus = getFieldValue(fields.syllabus);
+      prerequisites = getFieldValue(fields.prerequisites);
+      fees = getFieldValue(fields.fees) ? parseInt(getFieldValue(fields.fees), 10) : null;
+      subjectIds = parseSubjectIds(fields.subjectIds);
+
+      // Upload image if provided
+      if (files.image && files.image.length > 0) {
+        const imageFile = files.image[0];
+        const fileBuffer = await fs.promises.readFile(imageFile.filepath);
+        const uploadResult = await uploadImage(fileBuffer, `package-${Date.now()}`);
+        imageUrl = uploadResult.secure_url;
+        await fs.promises.unlink(imageFile.filepath).catch(() => {});
+      }
+    } else {
+      // Handle JSON request body
+      ({ name, code, startDate, packageType = 'standard', overview, syllabus, prerequisites, subjectIds, fees } = req.body);
+    }
 
     if (!name || !code) {
       return res.status(400).json({
@@ -70,15 +89,20 @@ exports.createPackage = async (req, res) => {
       });
     }
 
-    let imageUrl = null;
+    // Validate packageType
+    if (!['standard', 'others'].includes(packageType)) {
+      return res.status(400).json({
+        message: 'packageType must be either "standard" or "others"',
+      });
+    }
 
-    // Upload image if provided
-    if (files.image && files.image.length > 0) {
-      const imageFile = files.image[0];
-      const fileBuffer = await fs.promises.readFile(imageFile.filepath);
-      const uploadResult = await uploadImage(fileBuffer, `package-${Date.now()}`);
-      imageUrl = uploadResult.secure_url;
-      await fs.promises.unlink(imageFile.filepath).catch(() => {});
+    // If packageType is 'others', subjectIds must be provided and not empty
+    if (packageType === 'others') {
+      if (!subjectIds || !Array.isArray(subjectIds) || subjectIds.length === 0) {
+        return res.status(400).json({
+          message: 'When packageType is "others", subjectIds must be provided as a non-empty array',
+        });
+      }
     }
 
     // Validate subjects if provided
@@ -98,6 +122,8 @@ exports.createPackage = async (req, res) => {
       name,
       code,
       startDate: startDate || null,
+      packageType,
+      fees: fees || null,
       image: imageUrl,
       overview: safeJsonParse(overview),
       syllabus: safeJsonParse(syllabus),
@@ -221,10 +247,28 @@ exports.updatePackage = async (req, res) => {
       const name = getFieldValue(fields.name);
       const code = getFieldValue(fields.code);
       const startDate = getFieldValue(fields.startDate);
+      const packageType = getFieldValue(fields.packageType);
       const overview = getFieldValue(fields.overview);
       const syllabus = getFieldValue(fields.syllabus);
       const prerequisites = getFieldValue(fields.prerequisites);
+      const fees = getFieldValue(fields.fees) ? parseInt(getFieldValue(fields.fees), 10) : null;
       subjectIds = parseSubjectIds(fields.subjectIds);
+
+      // Validate packageType if provided
+      if (packageType && !['standard', 'others'].includes(packageType)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'packageType must be either "standard" or "others"',
+        });
+      }
+
+      // If packageType is being changed to 'others', ensure subjectIds are provided
+      if (packageType === 'others' && (!subjectIds || subjectIds.length === 0)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'When packageType is "others", subjectIds must be provided as a non-empty array',
+        });
+      }
 
       // Handle image update
       if (files.image && files.image.length > 0) {
@@ -249,23 +293,41 @@ exports.updatePackage = async (req, res) => {
       if (name !== undefined) updateData.name = name;
       if (code !== undefined) updateData.code = code;
       if (startDate !== undefined) updateData.startDate = startDate;
+      if (packageType !== undefined) updateData.packageType = packageType;
       if (overview !== undefined) updateData.overview = safeJsonParse(overview);
       if (syllabus !== undefined) updateData.syllabus = safeJsonParse(syllabus);
       if (prerequisites !== undefined) updateData.prerequisites = safeJsonParse(prerequisites);
+      if (fees !== undefined) updateData.fees = fees;
       updateData.image = imageUrl;
 
     } else {
       // Handle JSON request body
-      const { name, code, startDate, overview, syllabus, prerequisites, subjectIds: subjIds } = req.body;
+      const { name, code, startDate, packageType, overview, syllabus, prerequisites, subjectIds: subjIds, fees } = req.body;
       subjectIds = subjIds;
+
+      // Validate packageType if provided
+      if (packageType && !['standard', 'others'].includes(packageType)) {
+        return res.status(400).json({
+          message: 'packageType must be either "standard" or "others"',
+        });
+      }
+
+      // If packageType is being changed to 'others', ensure subjectIds are provided
+      if (packageType === 'others' && (!subjectIds || subjectIds.length === 0)) {
+        return res.status(400).json({
+          message: 'When packageType is "others", subjectIds must be provided as a non-empty array',
+        });
+      }
 
       // Build update data
       if (name !== undefined) updateData.name = name;
       if (code !== undefined) updateData.code = code;
       if (startDate !== undefined) updateData.startDate = startDate;
+      if (packageType !== undefined) updateData.packageType = packageType;
       if (overview !== undefined) updateData.overview = overview;
       if (syllabus !== undefined) updateData.syllabus = syllabus;
       if (prerequisites !== undefined) updateData.prerequisites = prerequisites;
+      if (fees !== undefined) updateData.fees = fees;
       updateData.image = imageUrl;
     }
 
@@ -397,3 +459,32 @@ exports.deletePackage = async (req, res) => {
     });
   }
 };
+/**
+ * GET package fees by ID (ALL ROLES)
+ */
+exports.getPackagePriceByid = async (req, res) => {
+  try {
+    const pkg = await Package.findByPk(req.params.id, {
+      attributes: ['id', 'name', 'code', 'fees']
+    });
+
+    if (!pkg) {
+      return res.status(404).json({
+        message: 'Package not found',
+      });
+    }
+
+    return res.status(200).json({
+      id: pkg.id,
+      name: pkg.name,
+      code: pkg.code,
+      fees: pkg.fees,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
+  }
+}
