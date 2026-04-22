@@ -32,6 +32,20 @@ db.HigherEducation = require('./highereducation')(sequelize, DataTypes);
 db.Certification = require('./certification')(sequelize, DataTypes);
 db.Project = require('./project')(sequelize, DataTypes);
 db.StudentPlacementApplied = require('./studentPlacementApplied')(sequelize, DataTypes);
+db.Course = require('./course')(sequelize, DataTypes);
+db.CourseEnrollment = require('./courseenrollment')(sequelize, DataTypes);
+db.OTP = require('./otp')(sequelize, DataTypes);
+
+// ONE-TO-MANY: User has many OTPs
+db.User.hasMany(db.OTP, {
+	foreignKey: 'userId',
+	as: 'otps',
+	onDelete: 'SET NULL',
+});
+db.OTP.belongsTo(db.User, {
+	foreignKey: 'userId',
+	as: 'user',
+});
 
 // ONE-TO-MANY: Placement has many WorkExperiences
 db.Placement.hasMany(db.WorkExperience, {
@@ -471,5 +485,38 @@ db.StudentPlacementApplied.belongsTo(db.JobPost, { foreignKey: 'jobPostId', as: 
 
 db.Placement.hasMany(db.StudentPlacementApplied, { foreignKey: 'userPlacementDetailId', as: 'jobApplications' });
 db.StudentPlacementApplied.belongsTo(db.Placement, { foreignKey: 'userPlacementDetailId', as: 'userPlacementDetail' });
+
+// ONE-TO-MANY: User has many CourseEnrollments
+db.User.hasMany(db.CourseEnrollment, {
+	foreignKey: 'userId',
+	onDelete: 'CASCADE',
+	as: 'courseEnrollments',
+});
+db.CourseEnrollment.belongsTo(db.User, {
+	foreignKey: 'userId',
+	as: 'user',
+});
+
+// ONE-TO-MANY: Course has many CourseEnrollments
+db.Course.hasMany(db.CourseEnrollment, {
+	foreignKey: 'courseId',
+	onDelete: 'CASCADE',
+	as: 'enrollments',
+});
+db.CourseEnrollment.belongsTo(db.Course, {
+	foreignKey: 'courseId',
+	as: 'course',
+});
+
+// ONE-TO-MANY: Package has many CourseEnrollments
+db.Package.hasMany(db.CourseEnrollment, {
+	foreignKey: 'packageId',
+	onDelete: 'CASCADE',
+	as: 'enrollments',
+});
+db.CourseEnrollment.belongsTo(db.Package, {
+	foreignKey: 'packageId',
+	as: 'package',
+});
 
 module.exports = db;

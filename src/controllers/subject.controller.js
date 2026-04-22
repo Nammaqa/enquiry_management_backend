@@ -30,24 +30,39 @@ exports.createSubject = async (req, res) => {
       });
     }
 
-    // Parse form data using formidable
-    const form = new Formidable({
-      multiples: false,
-      maxFileSize: 10 * 1024 * 1024, // 10MB limit
-      keepExtensions: true
-    });
+    let fields;
+    let files = {};
 
-    const [fields, files] = await form.parse(req);
+    // Check if request has multipart form data or JSON
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('multipart/form-data')) {
+      // Parse form data using formidable
+      const form = new Formidable({ 
+        multiples: false,
+        maxFileSize: 10 * 1024 * 1024, // 10MB limit
+        keepExtensions: true
+      });
+
+      const [parsedFields, parsedFiles] = await form.parse(req);
+      fields = parsedFields;
+      files = parsedFiles;
+    } else {
+      // Handle JSON request body
+      fields = {};
+      for (const [key, value] of Object.entries(req.body)) {
+        fields[key] = [value]; // Convert to array format for consistency
+      }
+    }
 
     // Extract field values (formidable returns arrays for fields)
-    const name = fields.name ? fields.name[0] : null;
-    const code = fields.code ? fields.code[0] : null;
-    const startDate = fields.startDate ? fields.startDate[0] : null;
-    const overview = fields.overview ? fields.overview[0] : null;
-    const syllabus = fields.syllabus ? fields.syllabus[0] : null;
-    const prerequisites = fields.prerequisites ? fields.prerequisites[0] : null;
-    const fees = fields.fees ? fields.fees[0] : null;
-
+    const name = fields.name ? (Array.isArray(fields.name) ? fields.name[0] : fields.name) : null;
+    const code = fields.code ? (Array.isArray(fields.code) ? fields.code[0] : fields.code) : null;
+    const startDate = fields.startDate ? (Array.isArray(fields.startDate) ? fields.startDate[0] : fields.startDate) : null;
+    const overview = fields.overview ? (Array.isArray(fields.overview) ? fields.overview[0] : fields.overview) : null;
+    const syllabus = fields.syllabus ? (Array.isArray(fields.syllabus) ? fields.syllabus[0] : fields.syllabus) : null;
+    const prerequisites = fields.prerequisites ? (Array.isArray(fields.prerequisites) ? fields.prerequisites[0] : fields.prerequisites) : null;
+    const fees = fields.fees ? (Array.isArray(fields.fees) ? fields.fees[0] : fields.fees) : null;
+  
 
     if (!name || !code) {
       return res.status(400).json({
@@ -79,7 +94,7 @@ exports.createSubject = async (req, res) => {
       overview: safeJsonParse(overview),
       syllabus: safeJsonParse(syllabus),
       prerequisites: safeJsonParse(prerequisites),
-      fees: safeJsonParse(fees)
+      fees: fees || null,
     });
 
     res.status(201).json({
@@ -102,7 +117,7 @@ exports.getAllSubjects = async (req, res) => {
       include: {
         model: require('../models').Package,
         as: 'packages',
-        attributes: ['id', 'name', 'code'],
+        attributes: ['id', 'name', 'code', 'fees'],
         through: { attributes: [] },
       },
     });
@@ -150,12 +165,12 @@ exports.getSubjectsByInstructor = async (req, res) => {
     // Find all subjects with those IDs
     const subjects = await Subject.findAll({
       where: { id: subjectIds },
-      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
       include: [
         {
           model: PackageModel,
           as: 'packages',
-          attributes: ['id', 'name', 'code'],
+          attributes: ['id', 'name', 'code', 'fees'],
           through: { attributes: [] },
         },
       ],
@@ -184,11 +199,11 @@ exports.getSubjectsByInstructor = async (req, res) => {
 exports.getSubjectById = async (req, res) => {
   try {
     const subject = await Subject.findByPk(req.params.id, {
-      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
       include: {
         model: require('../models').Package,
         as: 'packages',
-        attributes: ['id', 'name', 'code'],
+        attributes: ['id', 'name', 'code', 'fees'],
         through: { attributes: [] },
       },
     });
@@ -228,23 +243,38 @@ exports.updateSubject = async (req, res) => {
       });
     }
 
-    // Parse form data using formidable
-    const form = new Formidable({
-      multiples: false,
-      maxFileSize: 10 * 1024 * 1024, // 10MB limit
-      keepExtensions: true
-    });
+    let fields;
+    let files = {};
 
-    const [fields, files] = await form.parse(req);
+    // Check if request has multipart form data or JSON
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('multipart/form-data')) {
+      // Parse form data using formidable
+      const form = new Formidable({ 
+        multiples: false,
+        maxFileSize: 10 * 1024 * 1024, // 10MB limit
+        keepExtensions: true
+      });
+
+      const [parsedFields, parsedFiles] = await form.parse(req);
+      fields = parsedFields;
+      files = parsedFiles;
+    } else {
+      // Handle JSON request body
+      fields = {};
+      for (const [key, value] of Object.entries(req.body)) {
+        fields[key] = [value]; // Convert to array format for consistency
+      }
+    }
 
     // Extract field values (formidable returns arrays for fields)
-    const name = fields.name ? fields.name[0] : null;
-    const code = fields.code ? fields.code[0] : null;
-    const startDate = fields.startDate ? fields.startDate[0] : null;
-    const overview = fields.overview ? fields.overview[0] : null;
-    const syllabus = fields.syllabus ? fields.syllabus[0] : null;
-    const prerequisites = fields.prerequisites ? fields.prerequisites[0] : null;
-    const fees = fields.fees ? fields.fees[0] : null;
+    const name = fields.name ? (Array.isArray(fields.name) ? fields.name[0] : fields.name) : null;
+    const code = fields.code ? (Array.isArray(fields.code) ? fields.code[0] : fields.code) : null;
+    const startDate = fields.startDate ? (Array.isArray(fields.startDate) ? fields.startDate[0] : fields.startDate) : null;
+    const overview = fields.overview ? (Array.isArray(fields.overview) ? fields.overview[0] : fields.overview) : null;
+    const syllabus = fields.syllabus ? (Array.isArray(fields.syllabus) ? fields.syllabus[0] : fields.syllabus) : null;
+    const prerequisites = fields.prerequisites ? (Array.isArray(fields.prerequisites) ? fields.prerequisites[0] : fields.prerequisites) : null;
+    const fees = fields.fees ? (Array.isArray(fields.fees) ? fields.fees[0] : fields.fees) : null;
 
     let imageUrl = subject.image;
 
@@ -274,7 +304,7 @@ exports.updateSubject = async (req, res) => {
       overview: overview !== undefined ? safeJsonParse(overview) : subject.overview,
       syllabus: syllabus !== undefined ? safeJsonParse(syllabus) : subject.syllabus,
       prerequisites: prerequisites !== undefined ? safeJsonParse(prerequisites) : subject.prerequisites,
-      fees: fees !== undefined && fees !== null ? parseInt(fees, 10) : subject.fees,
+      fees: fees !== undefined ? fees : subject.fees,
     });
 
     res.json({

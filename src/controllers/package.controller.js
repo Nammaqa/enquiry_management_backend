@@ -57,31 +57,15 @@ exports.createPackage = async (req, res) => {
         keepExtensions: true
       });
 
-      const [fields, files] = await form.parse(req);
-
-      // Extract field values
-      name = getFieldValue(fields.name);
-      code = getFieldValue(fields.code);
-      startDate = getFieldValue(fields.startDate);
-      packageType = getFieldValue(fields.packageType) || 'standard';
-      overview = getFieldValue(fields.overview);
-      syllabus = getFieldValue(fields.syllabus);
-      prerequisites = getFieldValue(fields.prerequisites);
-      fees = getFieldValue(fields.fees) ? parseInt(getFieldValue(fields.fees), 10) : null;
-      subjectIds = parseSubjectIds(fields.subjectIds);
-
-      // Upload image if provided
-      if (files.image && files.image.length > 0) {
-        const imageFile = files.image[0];
-        const fileBuffer = await fs.promises.readFile(imageFile.filepath);
-        const uploadResult = await uploadImage(fileBuffer, `package-${Date.now()}`);
-        imageUrl = uploadResult.secure_url;
-        await fs.promises.unlink(imageFile.filepath).catch(() => {});
-      }
-    } else {
-      // Handle JSON request body
-      ({ name, code, startDate, packageType = 'standard', overview, syllabus, prerequisites, subjectIds, fees } = req.body);
-    }
+    // Extract field values
+    const name = getFieldValue(fields.name);
+    const code = getFieldValue(fields.code);
+    const startDate = getFieldValue(fields.startDate);
+    const overview = getFieldValue(fields.overview);
+    const syllabus = getFieldValue(fields.syllabus);
+    const prerequisites = getFieldValue(fields.prerequisites);
+    const fees = getFieldValue(fields.fees);
+    const subjectIds = parseSubjectIds(fields.subjectIds);
 
     if (!name || !code) {
       return res.status(400).json({
@@ -128,6 +112,7 @@ exports.createPackage = async (req, res) => {
       overview: safeJsonParse(overview),
       syllabus: safeJsonParse(syllabus),
       prerequisites: safeJsonParse(prerequisites),
+      fees: fees || null,
     });
 
     if (subjectsArray.length > 0) {
@@ -139,7 +124,7 @@ exports.createPackage = async (req, res) => {
       include: {
         model: Subject,
         as: 'subjects',
-        attributes: ['id', 'name', 'code'],
+        attributes: ['id', 'name', 'code', 'fees'],
         through: { attributes: [] },
       },
     });
@@ -160,10 +145,11 @@ exports.createPackage = async (req, res) => {
 exports.getAllPackages = async (req, res) => {
   try {
     const packages = await Package.findAll({
+      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
       include: {
         model: Subject,
         as: 'subjects',
-        attributes: ['id', 'name', 'code'],
+        attributes: ['id', 'name', 'code', 'fees'],
         through: { attributes: [] },
       },
     });
@@ -251,7 +237,7 @@ exports.updatePackage = async (req, res) => {
       const overview = getFieldValue(fields.overview);
       const syllabus = getFieldValue(fields.syllabus);
       const prerequisites = getFieldValue(fields.prerequisites);
-      const fees = getFieldValue(fields.fees) ? parseInt(getFieldValue(fields.fees), 10) : null;
+      const fees = getFieldValue(fields.fees);
       subjectIds = parseSubjectIds(fields.subjectIds);
 
       // Validate packageType if provided
@@ -302,7 +288,7 @@ exports.updatePackage = async (req, res) => {
 
     } else {
       // Handle JSON request body
-      const { name, code, startDate, packageType, overview, syllabus, prerequisites, subjectIds: subjIds, fees } = req.body;
+      const { name, code, startDate, overview, syllabus, prerequisites, fees, subjectIds: subjIds } = req.body;
       subjectIds = subjIds;
 
       // Validate packageType if provided
@@ -371,7 +357,7 @@ exports.updatePackage = async (req, res) => {
       include: {
         model: Subject,
         as: 'subjects',
-        attributes: ['id', 'name', 'code'],
+        attributes: ['id', 'name', 'code', 'fees'],
         through: { attributes: [] },
       },
       transaction

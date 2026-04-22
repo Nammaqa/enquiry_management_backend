@@ -31,9 +31,20 @@ exports.createLog = async (req, res) => {
             userId,
         });
 
+        // Fetch the log with user details
+        const logWithUser = await Log.findByPk(log.id, {
+            include: [
+                {
+                    model: require('../models').User,
+                    as: 'user',
+                    attributes: ['id', 'name', 'email', 'role'],
+                },
+            ],
+        });
+
         res.status(201).json({
             message: 'Log entry created successfully',
-            log,
+            log: logWithUser,
         });
     } catch (error) {
         console.error(error);
