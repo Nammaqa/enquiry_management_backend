@@ -11,6 +11,9 @@ router.get('/:id', auth, role(['ADMIN', 'ACCOUNTS']), controller.getBillingById)
 /* WRITE — ALL LOGGED-IN USERS (CREATE/UPDATE COMBINED) */
 router.post('/', auth, role(['ADMIN', 'ACCOUNTS']), controller.createOrUpdateBilling);
 
+/* UPDATE — ADMIN and ACCOUNTS */
+router.put('/:id', auth, role(['ADMIN', 'ACCOUNTS']), controller.updateBilling);
+
 /* DELETE — ADMIN ONLY */
 router.delete('/:id', auth, role(['ADMIN']), controller.deleteBilling);
 
