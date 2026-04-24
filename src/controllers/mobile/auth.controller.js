@@ -55,6 +55,7 @@ exports.signup = async (req, res) => {
         email,
         phone: phone_number,
         password: hashedPassword,
+        candidateStatus:'enquiry stage'
       });
 
       // Generate OTP

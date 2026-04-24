@@ -97,7 +97,7 @@ module.exports = (sequelize, DataTypes) => {
             candidateStatus: {
                 type: DataTypes.ENUM('demo', 'qualified demo', 'class', 'class qualified', 'placement', 'enquiry stage'),
                 allowNull: false,
-                defaultValue: 'demo',
+                defaultValue: 'enquiry stage',
             },
         },
         {
