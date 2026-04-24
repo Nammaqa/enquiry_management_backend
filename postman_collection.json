@@ -1,0 +1,209 @@
+{
+  "info": {
+    "name": "Enquiry Management API - Domain Field",
+    "description": "API tests for Package and Subject domain field",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Packages",
+      "item": [
+        {
+          "name": "Create Package with Domain",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Web Development Bootcamp\",\n  \"code\": \"WDB001\",\n  \"description\": \"Comprehensive web development course\",\n  \"type\": \"bootcamp\",\n  \"duration\": 12,\n  \"fees\": 50000,\n  \"domain\": \"Development\",\n  \"packageType\": \"standard\",\n  \"startDate\": \"2026-05-01\",\n  \"overview\": {\"introduction\": \"Learn web development from basics\"},\n  \"syllabus\": {\"modules\": [\"HTML\", \"CSS\", \"JavaScript\"]},\n  \"prerequisites\": {\"required\": [\"Basic computer knowledge\"]}\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/packages",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "packages"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Packages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3000/api/packages",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "packages"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Package by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3000/api/packages/{{package_id}}",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "packages", "{{package_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Package Domain",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"domain\": \"Testing\",\n  \"fees\": 55000\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/packages/{{package_id}}",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "packages", "{{package_id}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Subjects",
+      "item": [
+        {
+          "name": "Create Subject with Domain",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Java Programming\",\n  \"code\": \"JAVA101\",\n  \"description\": \"Learn Java programming fundamentals\",\n  \"type\": \"beginner\",\n  \"duration\": 10,\n  \"fees\": 20000,\n  \"domain\": \"Development\",\n  \"startDate\": \"2026-06-01\",\n  \"overview\": {\"topics\": \"Core Java\"},\n  \"syllabus\": {\"modules\": [\"Variables\", \"OOP\", \"Collections\"]},\n  \"prerequisites\": {\"required\": [\"Basic knowledge\"]}\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/subjects",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "subjects"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Subjects",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3000/api/subjects",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "subjects"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Subject Domain",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"domain\": \"Testing\",\n  \"fees\": 22000\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/subjects/{{subject_id}}",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "subjects", "{{subject_id}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "token",
+      "value": "your_jwt_token_here",
+      "type": "string"
+    },
+    {
+      "key": "package_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "subject_id",
+      "value": "1",
+      "type": "string"
+    }
+  ]
+}
+
