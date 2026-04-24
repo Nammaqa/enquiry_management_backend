@@ -46,7 +46,7 @@ exports.createPackage = async (req, res) => {
       });
     }
 
-    let name, code, startDate, packageType, overview, syllabus, prerequisites, subjectIds, fees, imageUrl = null;
+    let name, code, description, type, duration, startDate, packageType, overview, syllabus, prerequisites, subjectIds, fees, imageUrl = null;
 
     // Check if request has files (multipart/form-data) or is JSON
     if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
@@ -62,6 +62,9 @@ exports.createPackage = async (req, res) => {
       // Extract field values
       name = getFieldValue(fields.name);
       code = getFieldValue(fields.code);
+      description = getFieldValue(fields.description);
+      type = getFieldValue(fields.type);
+      duration = getFieldValue(fields.duration);
       startDate = getFieldValue(fields.startDate);
       packageType = getFieldValue(fields.packageType);
       overview = getFieldValue(fields.overview);
@@ -72,15 +75,27 @@ exports.createPackage = async (req, res) => {
 
       // Handle image upload if provided
       if (files.image && files.image[0]) {
-        const imageFile = files.image[0];
-        const uploadResult = await uploadImage(imageFile.filepath);
-        imageUrl = uploadResult.secure_url;
-      }
+      const imageFile = files.image[0];
+
+      const fileBuffer = await fs.promises.readFile(imageFile.filepath);
+
+      const uploadResult = await uploadImage(
+        fileBuffer,
+        `package-${Date.now()}`
+      );
+
+      imageUrl = uploadResult.secure_url;
+
+      await fs.promises.unlink(imageFile.filepath).catch(() => {});
+    }
     } else {
       // Handle JSON request
-      const { name: reqName, code: reqCode, startDate: reqStartDate, packageType: reqPackageType, overview: reqOverview, syllabus: reqSyllabus, prerequisites: reqPrerequisites, fees: reqFees, subjectIds: reqSubjectIds } = req.body;
+      const { name: reqName, code: reqCode, description: reqDescription, type: reqType, duration: reqDuration, startDate: reqStartDate, packageType: reqPackageType, overview: reqOverview, syllabus: reqSyllabus, prerequisites: reqPrerequisites, fees: reqFees, subjectIds: reqSubjectIds } = req.body;
       name = reqName;
       code = reqCode;
+      description = reqDescription;
+      type = reqType;
+      duration = reqDuration;
       startDate = reqStartDate;
       packageType = reqPackageType;
       overview = reqOverview;
@@ -128,6 +143,9 @@ exports.createPackage = async (req, res) => {
     const pkg = await Package.create({
       name,
       code,
+      description,
+      type,
+      duration: duration ? parseInt(duration) : null,
       startDate: startDate || null,
       packageType,
       fees: fees || null,
@@ -168,7 +186,7 @@ exports.createPackage = async (req, res) => {
 exports.getAllPackages = async (req, res) => {
   try {
     const packages = await Package.findAll({
-      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
       include: {
         model: Subject,
         as: 'subjects',
@@ -189,6 +207,7 @@ exports.getAllPackages = async (req, res) => {
 exports.getPackageById = async (req, res) => {
   try {
     const pkg = await Package.findByPk(req.params.id, {
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
       include: {
         model: Subject,
         as: 'subjects',
@@ -255,6 +274,9 @@ exports.updatePackage = async (req, res) => {
       // Extract field values
       const name = getFieldValue(fields.name);
       const code = getFieldValue(fields.code);
+      const description = getFieldValue(fields.description);
+      const type = getFieldValue(fields.type);
+      const duration = getFieldValue(fields.duration);
       const startDate = getFieldValue(fields.startDate);
       const packageType = getFieldValue(fields.packageType);
       const overview = getFieldValue(fields.overview);
@@ -301,6 +323,9 @@ exports.updatePackage = async (req, res) => {
       // Build update data
       if (name !== undefined) updateData.name = name;
       if (code !== undefined) updateData.code = code;
+      if (description !== undefined) updateData.description = description;
+      if (type !== undefined) updateData.type = type;
+      if (duration !== undefined) updateData.duration = duration ? parseInt(duration) : null;
       if (startDate !== undefined) updateData.startDate = startDate;
       if (packageType !== undefined) updateData.packageType = packageType;
       if (overview !== undefined) updateData.overview = safeJsonParse(overview);
@@ -311,11 +336,15 @@ exports.updatePackage = async (req, res) => {
 
     } else {
       // Handle JSON request body
-      const { name, code, startDate, overview, syllabus, prerequisites, fees, subjectIds: subjIds } = req.body;
+      const { name, code, description, type, duration, startDate, overview, syllabus, prerequisites, fees, subjectIds: subjIds } = req.body;
       subjectIds = subjIds;
+
+      // Validate packageType if provided (need to get from req.body)
+      const packageType = req.body.packageType;
 
       // Validate packageType if provided
       if (packageType && !['standard', 'others'].includes(packageType)) {
+        await transaction.rollback();
         return res.status(400).json({
           message: 'packageType must be either "standard" or "others"',
         });
@@ -323,6 +352,7 @@ exports.updatePackage = async (req, res) => {
 
       // If packageType is being changed to 'others', ensure subjectIds are provided
       if (packageType === 'others' && (!subjectIds || subjectIds.length === 0)) {
+        await transaction.rollback();
         return res.status(400).json({
           message: 'When packageType is "others", subjectIds must be provided as a non-empty array',
         });
@@ -331,6 +361,9 @@ exports.updatePackage = async (req, res) => {
       // Build update data
       if (name !== undefined) updateData.name = name;
       if (code !== undefined) updateData.code = code;
+      if (description !== undefined) updateData.description = description;
+      if (type !== undefined) updateData.type = type;
+      if (duration !== undefined) updateData.duration = duration ? parseInt(duration) : null;
       if (startDate !== undefined) updateData.startDate = startDate;
       if (packageType !== undefined) updateData.packageType = packageType;
       if (overview !== undefined) updateData.overview = overview;
