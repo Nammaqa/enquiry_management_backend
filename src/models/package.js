@@ -17,6 +17,8 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         defaultValue: 0,
       },
+      domain: DataTypes.TEXT,
+      mode: DataTypes.TEXT,
     },
     {
       tableName: 'packages',

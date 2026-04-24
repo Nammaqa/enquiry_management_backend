@@ -46,7 +46,7 @@ exports.createPackage = async (req, res) => {
       });
     }
 
-    let name, code, description, type, duration, startDate, packageType, overview, syllabus, prerequisites, subjectIds, fees, imageUrl = null;
+    let name, code, description, type, duration, startDate, packageType, overview, syllabus, prerequisites, subjectIds, fees, domain, mode, imageUrl = null;
 
     // Check if request has files (multipart/form-data) or is JSON
     if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
@@ -71,6 +71,8 @@ exports.createPackage = async (req, res) => {
       syllabus = getFieldValue(fields.syllabus);
       prerequisites = getFieldValue(fields.prerequisites);
       fees = getFieldValue(fields.fees);
+      domain = getFieldValue(fields.domain);
+      mode = getFieldValue(fields.mode);
       subjectIds = parseSubjectIds(fields.subjectIds);
 
       // Handle image upload if provided
@@ -90,7 +92,7 @@ exports.createPackage = async (req, res) => {
     }
     } else {
       // Handle JSON request
-      const { name: reqName, code: reqCode, description: reqDescription, type: reqType, duration: reqDuration, startDate: reqStartDate, packageType: reqPackageType, overview: reqOverview, syllabus: reqSyllabus, prerequisites: reqPrerequisites, fees: reqFees, subjectIds: reqSubjectIds } = req.body;
+      const { name: reqName, code: reqCode, description: reqDescription, type: reqType, duration: reqDuration, startDate: reqStartDate, packageType: reqPackageType, overview: reqOverview, syllabus: reqSyllabus, prerequisites: reqPrerequisites, fees: reqFees, domain: reqDomain, mode: reqMode, subjectIds: reqSubjectIds } = req.body;
       name = reqName;
       code = reqCode;
       description = reqDescription;
@@ -101,7 +103,9 @@ exports.createPackage = async (req, res) => {
       overview = reqOverview;
       syllabus = reqSyllabus;
       prerequisites = reqPrerequisites;
-      fees = reqFees;
+      fees = Number(reqFees);
+      domain = reqDomain;
+      mode = reqMode;
       subjectIds = reqSubjectIds;
     }
 
@@ -111,15 +115,30 @@ exports.createPackage = async (req, res) => {
       });
     }
 
-    // Validate packageType
-    if (!['standard', 'others'].includes(packageType)) {
+    // Validate type field
+    if (type && !['starter', 'advance', 'expert'].includes(type)) {
+      return res.status(400).json({
+        message: 'type must be one of: starter, advance, expert',
+      });
+    }
+
+    // Validate duration is a number
+    if (duration !== null && duration !== undefined && isNaN(duration)) {
+      return res.status(400).json({
+        message: 'duration must be a valid number',
+      });
+    }
+
+    // Validate packageType - use default 'standard' if not provided
+    const finalPackageType = packageType || 'standard';
+    if (!['standard', 'others'].includes(finalPackageType)) {
       return res.status(400).json({
         message: 'packageType must be either "standard" or "others"',
       });
     }
 
     // If packageType is 'others', subjectIds must be provided and not empty
-    if (packageType === 'others') {
+    if (finalPackageType === 'others') {
       if (!subjectIds || !Array.isArray(subjectIds) || subjectIds.length === 0) {
         return res.status(400).json({
           message: 'When packageType is "others", subjectIds must be provided as a non-empty array',
@@ -147,8 +166,10 @@ exports.createPackage = async (req, res) => {
       type,
       duration: duration ? parseInt(duration) : null,
       startDate: startDate || null,
-      packageType,
+      packageType: finalPackageType,
       fees: fees || null,
+      domain,
+      mode,
       image: imageUrl,
       overview: safeJsonParse(overview),
       syllabus: safeJsonParse(syllabus),
@@ -186,7 +207,7 @@ exports.createPackage = async (req, res) => {
 exports.getAllPackages = async (req, res) => {
   try {
     const packages = await Package.findAll({
-      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'domain', 'mode', 'createdAt', 'updatedAt'],
       include: {
         model: Subject,
         as: 'subjects',
@@ -207,7 +228,7 @@ exports.getAllPackages = async (req, res) => {
 exports.getPackageById = async (req, res) => {
   try {
     const pkg = await Package.findByPk(req.params.id, {
-      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'domain', 'mode', 'createdAt', 'updatedAt'],
       include: {
         model: Subject,
         as: 'subjects',
@@ -283,6 +304,8 @@ exports.updatePackage = async (req, res) => {
       const syllabus = getFieldValue(fields.syllabus);
       const prerequisites = getFieldValue(fields.prerequisites);
       const fees = getFieldValue(fields.fees);
+      const domain = getFieldValue(fields.domain);
+      const mode = getFieldValue(fields.mode);
       subjectIds = parseSubjectIds(fields.subjectIds);
 
       // Validate packageType if provided
@@ -290,6 +313,22 @@ exports.updatePackage = async (req, res) => {
         await transaction.rollback();
         return res.status(400).json({
           message: 'packageType must be either "standard" or "others"',
+        });
+      }
+
+      // Validate type field
+      if (type && !['starter', 'advance', 'expert'].includes(type)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'type must be one of: starter, advance, expert',
+        });
+      }
+
+      // Validate duration is a number
+      if (duration !== null && duration !== undefined && isNaN(duration)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'duration must be a valid number',
         });
       }
 
@@ -332,11 +371,13 @@ exports.updatePackage = async (req, res) => {
       if (syllabus !== undefined) updateData.syllabus = safeJsonParse(syllabus);
       if (prerequisites !== undefined) updateData.prerequisites = safeJsonParse(prerequisites);
       if (fees !== undefined) updateData.fees = fees;
+      if (domain !== undefined) updateData.domain = domain;
+      if (mode !== undefined) updateData.mode = mode;
       updateData.image = imageUrl;
 
     } else {
       // Handle JSON request body
-      const { name, code, description, type, duration, startDate, overview, syllabus, prerequisites, fees, subjectIds: subjIds } = req.body;
+      const { name, code, description, type, duration, startDate, overview, syllabus, prerequisites, fees, domain, mode, subjectIds: subjIds } = req.body;
       subjectIds = subjIds;
 
       // Validate packageType if provided (need to get from req.body)
@@ -347,6 +388,22 @@ exports.updatePackage = async (req, res) => {
         await transaction.rollback();
         return res.status(400).json({
           message: 'packageType must be either "standard" or "others"',
+        });
+      }
+
+      // Validate type field
+      if (type && !['starter', 'advance', 'expert'].includes(type)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'type must be one of: starter, advance, expert',
+        });
+      }
+
+      // Validate duration is a number
+      if (duration !== null && duration !== undefined && isNaN(duration)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'duration must be a valid number',
         });
       }
 
@@ -370,6 +427,8 @@ exports.updatePackage = async (req, res) => {
       if (syllabus !== undefined) updateData.syllabus = syllabus;
       if (prerequisites !== undefined) updateData.prerequisites = prerequisites;
       if (fees !== undefined) updateData.fees = fees;
+      if (domain !== undefined) updateData.domain = domain;
+      if (mode !== undefined) updateData.mode = mode;
       updateData.image = imageUrl;
     }
 

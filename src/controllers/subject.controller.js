@@ -65,7 +65,8 @@ exports.createSubject = async (req, res) => {
     const syllabus = fields.syllabus ? (Array.isArray(fields.syllabus) ? fields.syllabus[0] : fields.syllabus) : null;
     const prerequisites = fields.prerequisites ? (Array.isArray(fields.prerequisites) ? fields.prerequisites[0] : fields.prerequisites) : null;
     const fees = fields.fees ? (Array.isArray(fields.fees) ? fields.fees[0] : fields.fees) : null;
-  
+    const domain = fields.domain ? (Array.isArray(fields.domain) ? fields.domain[0] : fields.domain) : null;
+    const mode = fields.mode ? (Array.isArray(fields.mode) ? fields.mode[0] : fields.mode) : null;
 
     if (!name || !code) {
       return res.status(400).json({
@@ -73,8 +74,21 @@ exports.createSubject = async (req, res) => {
       });
     }
 
+    // Validate type field
+    if (type && !['starter', 'advance', 'expert'].includes(type)) {
+      return res.status(400).json({
+        message: 'type must be one of: starter, advance, expert',
+      });
+    }
+
+    // Validate duration is a number
+    if (duration !== null && duration !== undefined && isNaN(duration)) {
+      return res.status(400).json({
+        message: 'duration must be a valid number',
+      });
+    }
+
     let imageUrl = null;
-    let imagePublicId = null;
 
     // Upload image if provided
     if (files.image && files.image.length > 0) {
@@ -101,6 +115,8 @@ exports.createSubject = async (req, res) => {
       syllabus: safeJsonParse(syllabus),
       prerequisites: safeJsonParse(prerequisites),
       fees: fees || null,
+      domain,
+      mode,
     });
 
     res.status(201).json({
@@ -119,7 +135,7 @@ exports.createSubject = async (req, res) => {
 exports.getAllSubjects = async (req, res) => {
   try {
     const subjects = await Subject.findAll({
-      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'domain', 'mode', 'createdAt', 'updatedAt'],
       include: {
         model: require('../models').Package,
         as: 'packages',
@@ -284,6 +300,22 @@ exports.updateSubject = async (req, res) => {
     const syllabus = fields.syllabus ? (Array.isArray(fields.syllabus) ? fields.syllabus[0] : fields.syllabus) : null;
     const prerequisites = fields.prerequisites ? (Array.isArray(fields.prerequisites) ? fields.prerequisites[0] : fields.prerequisites) : null;
     const fees = fields.fees ? (Array.isArray(fields.fees) ? fields.fees[0] : fields.fees) : null;
+    const domain = fields.domain ? (Array.isArray(fields.domain) ? fields.domain[0] : fields.domain) : null;
+    const mode = fields.mode ? (Array.isArray(fields.mode) ? fields.mode[0] : fields.mode) : null;
+
+    // Validate type field
+    if (type && !['starter', 'advance', 'expert'].includes(type)) {
+      return res.status(400).json({
+        message: 'type must be one of: starter, advance, expert',
+      });
+    }
+
+    // Validate duration is a number
+    if (duration !== null && duration !== undefined && isNaN(duration)) {
+      return res.status(400).json({
+        message: 'duration must be a valid number',
+      });
+    }
 
     let imageUrl = subject.image;
 
@@ -317,6 +349,8 @@ exports.updateSubject = async (req, res) => {
       syllabus: syllabus !== undefined ? safeJsonParse(syllabus) : subject.syllabus,
       prerequisites: prerequisites !== undefined ? safeJsonParse(prerequisites) : subject.prerequisites,
       fees: fees !== undefined ? fees : subject.fees,
+      domain: domain !== undefined && domain !== null ? domain : subject.domain,
+      mode: mode !== undefined && mode !== null ? mode : subject.mode,
     });
 
     res.json({
