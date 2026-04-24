@@ -357,6 +357,7 @@ exports.updateEnquiry = async (req, res) => {
       name,
       email,
       phone,
+      password,
       current_location,
       profession,
       qualification,
@@ -370,6 +371,9 @@ exports.updateEnquiry = async (req, res) => {
       referral,
       consent,
       candidateStatus,
+      passwordChanged,
+      globalUser,
+      global,
     } = req.body;
 
     const normalizedPhone = phone?.replace(/\D/g, '');
@@ -460,6 +464,21 @@ exports.updateEnquiry = async (req, res) => {
       return res.status(400).json({ message: 'consent must be a boolean value' });
     }
 
+    // Validate passwordChanged if provided
+    if (passwordChanged !== undefined && typeof passwordChanged !== 'boolean') {
+      return res.status(400).json({ message: 'passwordChanged must be a boolean value' });
+    }
+
+    // Validate globalUser if provided
+    if (globalUser !== undefined && typeof globalUser !== 'boolean') {
+      return res.status(400).json({ message: 'globalUser must be a boolean value' });
+    }
+
+    // Validate global if provided
+    if (global !== undefined && typeof global !== 'boolean') {
+      return res.status(400).json({ message: 'global must be a boolean value' });
+    }
+
     // Validate package and subject selection
     // Determine the effective packageId and subjectIds after update
     const effectivePackageId = packageId !== undefined ? packageId : enquiry.packageId;
@@ -494,6 +513,7 @@ exports.updateEnquiry = async (req, res) => {
     if (name !== undefined) updateData.name = name.trim();
     if (email !== undefined) updateData.email = email.toLowerCase().trim();
     if (phone !== undefined) updateData.phone = phone.replace(/\D/g, '');
+    if (password !== undefined) updateData.password = password;
     if (current_location !== undefined) updateData.current_location = current_location?.trim() || null;
     if (profession !== undefined) updateData.profession = profession?.trim() || null;
     if (qualification !== undefined) updateData.qualification = qualification?.trim() || null;
@@ -507,6 +527,9 @@ exports.updateEnquiry = async (req, res) => {
     if (referral !== undefined) updateData.referral = referral?.trim() || null;
     if (consent !== undefined) updateData.consent = consent;
     if (candidateStatus !== undefined) updateData.candidateStatus = candidateStatus;
+    if (passwordChanged !== undefined) updateData.passwordChanged = passwordChanged;
+    if (globalUser !== undefined) updateData.globalUser = globalUser;
+    if (global !== undefined) updateData.global = global;
 
     await enquiry.update(updateData);
 
@@ -518,6 +541,7 @@ exports.updateEnquiry = async (req, res) => {
         name: enquiry.name,
         email: enquiry.email,
         phone: enquiry.phone,
+        password: enquiry.password ? '***' : null,
         current_location: enquiry.current_location,
         profession: enquiry.profession,
         qualification: enquiry.qualification,
@@ -531,6 +555,9 @@ exports.updateEnquiry = async (req, res) => {
         referral: enquiry.referral,
         consent: enquiry.consent,
         candidateStatus: enquiry.candidateStatus,
+        passwordChanged: enquiry.passwordChanged,
+        globalUser: enquiry.globalUser,
+        global: enquiry.global,
         updatedAt: enquiry.updatedAt,
       }
     });
