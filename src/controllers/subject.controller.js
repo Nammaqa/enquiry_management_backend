@@ -57,6 +57,9 @@ exports.createSubject = async (req, res) => {
     // Extract field values (formidable returns arrays for fields)
     const name = fields.name ? (Array.isArray(fields.name) ? fields.name[0] : fields.name) : null;
     const code = fields.code ? (Array.isArray(fields.code) ? fields.code[0] : fields.code) : null;
+    const description = fields.description ? (Array.isArray(fields.description) ? fields.description[0] : fields.description) : null;
+    const type = fields.type ? (Array.isArray(fields.type) ? fields.type[0] : fields.type) : null;
+    const duration = fields.duration ? (Array.isArray(fields.duration) ? fields.duration[0] : fields.duration) : null;
     const startDate = fields.startDate ? (Array.isArray(fields.startDate) ? fields.startDate[0] : fields.startDate) : null;
     const overview = fields.overview ? (Array.isArray(fields.overview) ? fields.overview[0] : fields.overview) : null;
     const syllabus = fields.syllabus ? (Array.isArray(fields.syllabus) ? fields.syllabus[0] : fields.syllabus) : null;
@@ -89,6 +92,9 @@ exports.createSubject = async (req, res) => {
     const subject = await Subject.create({
       name,
       code,
+      description,
+      type,
+      duration: duration ? parseInt(duration) : null,
       startDate: startDate || null,
       image: imageUrl,
       overview: safeJsonParse(overview),
@@ -113,7 +119,7 @@ exports.createSubject = async (req, res) => {
 exports.getAllSubjects = async (req, res) => {
   try {
     const subjects = await Subject.findAll({
-      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
       include: {
         model: require('../models').Package,
         as: 'packages',
@@ -165,7 +171,7 @@ exports.getSubjectsByInstructor = async (req, res) => {
     // Find all subjects with those IDs
     const subjects = await Subject.findAll({
       where: { id: subjectIds },
-      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
       include: [
         {
           model: PackageModel,
@@ -199,7 +205,7 @@ exports.getSubjectsByInstructor = async (req, res) => {
 exports.getSubjectById = async (req, res) => {
   try {
     const subject = await Subject.findByPk(req.params.id, {
-      attributes: ['id', 'name', 'code', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
       include: {
         model: require('../models').Package,
         as: 'packages',
@@ -270,6 +276,9 @@ exports.updateSubject = async (req, res) => {
     // Extract field values (formidable returns arrays for fields)
     const name = fields.name ? (Array.isArray(fields.name) ? fields.name[0] : fields.name) : null;
     const code = fields.code ? (Array.isArray(fields.code) ? fields.code[0] : fields.code) : null;
+    const description = fields.description ? (Array.isArray(fields.description) ? fields.description[0] : fields.description) : null;
+    const type = fields.type ? (Array.isArray(fields.type) ? fields.type[0] : fields.type) : null;
+    const duration = fields.duration ? (Array.isArray(fields.duration) ? fields.duration[0] : fields.duration) : null;
     const startDate = fields.startDate ? (Array.isArray(fields.startDate) ? fields.startDate[0] : fields.startDate) : null;
     const overview = fields.overview ? (Array.isArray(fields.overview) ? fields.overview[0] : fields.overview) : null;
     const syllabus = fields.syllabus ? (Array.isArray(fields.syllabus) ? fields.syllabus[0] : fields.syllabus) : null;
@@ -299,6 +308,9 @@ exports.updateSubject = async (req, res) => {
     await subject.update({
       name: name || subject.name,
       code: code || subject.code,
+      description: description !== undefined && description !== null ? description : subject.description,
+      type: type !== undefined && type !== null ? type : subject.type,
+      duration: duration !== undefined && duration !== null ? parseInt(duration) : subject.duration,
       startDate: startDate || subject.startDate,
       image: imageUrl,
       overview: overview !== undefined ? safeJsonParse(overview) : subject.overview,
