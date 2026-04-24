@@ -1,4 +1,4 @@
-const { User, OTP } = require('../../models');
+const { Enquiry, OTP } = require('../../models');
 const { hashPassword, comparePassword } = require('../../utils/password');
 const { signToken } = require('../../config/jwt');
 const { generateOTP, sendOTPViaSMS } = require('../../utils/otp');
@@ -30,7 +30,7 @@ exports.signup = async (req, res) => {
     }
 
     // Check if email already exists
-    const existingEmail = await User.findOne({ where: { email } });
+    const existingEmail = await Enquiry.findOne({ where: { email } });
     if (existingEmail) {
       return res.status(409).json({
         message: 'Email already exists',
@@ -38,7 +38,7 @@ exports.signup = async (req, res) => {
     }
 
     // Check if phone number already exists
-    const existingPhone = await User.findOne({ where: { phone_number } });
+    const existingPhone = await Enquiry.findOne({ where: { phone: phone_number } });
     if (existingPhone) {
       return res.status(409).json({
         message: 'Phone number already exists',
@@ -48,36 +48,32 @@ exports.signup = async (req, res) => {
     // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Create User account
+    // Create student account in Enquiry table
     try {
-      const newUser = await User.create({
+      const newStudent = await Enquiry.create({
         name: fullName,
         email,
-        phone_number,
+        phone: phone_number,
         password: hashedPassword,
-        role: 'user',
       });
 
       // Generate OTP
       const otpCode = generateOTP();
-
-      // Set OTP expiration time (10 minutes)
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-      // Delete any existing OTP for this phone/email
+      // Delete any existing OTP for this phone
       try {
         await OTP.destroy({ where: { phone_number } });
       } catch (err) {
         console.error('Error deleting old OTP:', err.message);
       }
 
-      // Save OTP to database with userId reference
+      // Save OTP to database
       const otpRecord = await OTP.create({
-        userId: newUser.id,
+        userId: newStudent.id,
         email,
         phone_number,
         fullName,
-        password: hashedPassword, // Store hashed password temporarily
         otp_code: otpCode,
         is_verified: false,
         expires_at: expiresAt,
@@ -93,15 +89,13 @@ exports.signup = async (req, res) => {
         });
       }
 
-      // Return with user details including ID
       return res.status(200).json({
         message: 'OTP sent successfully to your phone',
-        user: {
-          id: newUser.id,
-          name: newUser.name,
-          email: newUser.email,
-          phone_number: newUser.phone_number,
-          role: newUser.role,
+        student: {
+          id: newStudent.id,
+          name: newStudent.name,
+          email: newStudent.email,
+          phone_number: newStudent.phone,
         },
         reference_id: otpRecord.id,
         expiresIn: '10 minutes',
@@ -125,23 +119,23 @@ exports.signup = async (req, res) => {
 
 exports.verifyOTP = async (req, res) => {
   try {
-    const { user_id, phone_number, otp_code } = req.body;
+    const { student_id, phone_number, otp_code } = req.body;
 
     // Validate required fields
-    if (!user_id || !phone_number || !otp_code) {
+    if (!student_id || !phone_number || !otp_code) {
       return res.status(400).json({
-        message: 'user_id, phone_number, and otp_code are required',
+        message: 'student_id, phone_number, and otp_code are required',
       });
     }
 
     // Find OTP record
     const otpRecord = await OTP.findOne({
-      where: { userId: user_id, phone_number, otp_code },
+      where: { userId: student_id, phone_number, otp_code },
     });
 
     if (!otpRecord) {
       return res.status(401).json({
-        message: 'Invalid OTP or user credentials',
+        message: 'Invalid OTP or student credentials',
       });
     }
 
@@ -159,11 +153,12 @@ exports.verifyOTP = async (req, res) => {
       });
     }
 
-    // Find user
-    const user = await User.findByPk(user_id);
-    if (!user) {
+    // Find student from Enquiry table
+    const student = await Enquiry.findByPk(student_id);
+    
+    if (!student) {
       return res.status(404).json({
-        message: 'User not found',
+        message: 'Student not found',
       });
     }
 
@@ -173,22 +168,21 @@ exports.verifyOTP = async (req, res) => {
 
     // Generate JWT token
     const token = await signToken({
-      userId: user.id,
-      name: user.name,
-      email: user.email,
-      phone_number: user.phone_number,
-      role: user.role,
+      userId: student.id,
+      name: student.name,
+      email: student.email,
+      phone_number: student.phone,
+      role: 'student',
     });
 
     return res.status(200).json({
       message: 'OTP verified successfully',
       token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone_number: user.phone_number,
-        role: user.role,
+      student: {
+        id: student.id,
+        name: student.name,
+        email: student.email,
+        phone_number: student.phone,
       },
     });
   } catch (error) {
@@ -202,42 +196,40 @@ exports.verifyOTP = async (req, res) => {
 
 exports.resendSignupOTP = async (req, res) => {
   try {
-    const { user_id, phone_number } = req.body;
+    const { student_id, phone_number } = req.body;
 
     // Validate required fields
-    if (!user_id || !phone_number) {
+    if (!student_id || !phone_number) {
       return res.status(400).json({
-        message: 'user_id and phone_number are required',
+        message: 'student_id and phone_number are required',
       });
     }
 
-    // Verify user exists
-    const user = await User.findByPk(user_id);
-    if (!user) {
+    // Verify student exists
+    const student = await Enquiry.findByPk(student_id);
+    if (!student) {
       return res.status(404).json({
-        message: 'User not found',
+        message: 'Student not found',
       });
     }
 
-    // Verify phone number matches user's phone
-    if (user.phone_number !== phone_number) {
+    // Verify phone number matches student's phone
+    if (student.phone !== phone_number) {
       return res.status(400).json({
-        message: 'Phone number does not match user account',
+        message: 'Phone number does not match student account',
       });
     }
 
     // Find existing OTP record
-    const existingOTP = await OTP.findOne({ where: { userId: user_id, phone_number } });
+    const existingOTP = await OTP.findOne({ where: { userId: student_id, phone_number } });
     if (!existingOTP) {
       return res.status(404).json({
-        message: 'No pending OTP found for this user and phone number',
+        message: 'No pending OTP found for this student and phone number',
       });
     }
 
     // Generate new OTP
     const otpCode = generateOTP();
-
-    // Set OTP expiration time (10 minutes)
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     // Update OTP with new code
@@ -296,18 +288,16 @@ exports.sendLoginOTP = async (req, res) => {
       });
     }
 
-    // Check if user exists
-    const user = await User.findOne({ where: { phone_number } });
-    if (!user) {
+    // Check if student exists
+    const student = await Enquiry.findOne({ where: { phone: phone_number } });
+    if (!student) {
       return res.status(404).json({
-        message: 'User not found',
+        message: 'Student not found',
       });
     }
 
     // Generate OTP
     const otpCode = generateOTP();
-
-    // Set OTP expiration time (10 minutes)
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     // Delete any existing OTP for this phone and create new one
@@ -320,8 +310,8 @@ exports.sendLoginOTP = async (req, res) => {
     // Save OTP to database with userId
     try {
       await OTP.create({
-        userId: user.id,
-        email: user.email,
+        userId: student.id,
+        email: student.email,
         phone_number,
         otp_code: otpCode,
         is_verified: false,
@@ -373,18 +363,16 @@ exports.resendLoginOTP = async (req, res) => {
       });
     }
 
-    // Check if user exists
-    const user = await User.findOne({ where: { phone_number } });
-    if (!user) {
+    // Check if student exists
+    const student = await Enquiry.findOne({ where: { phone: phone_number } });
+    if (!student) {
       return res.status(404).json({
-        message: 'User not found',
+        message: 'Student not found',
       });
     }
 
     // Generate new OTP
     const otpCode = generateOTP();
-
-    // Set OTP expiration time (10 minutes)
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     // Delete any existing OTP for this phone
@@ -397,8 +385,8 @@ exports.resendLoginOTP = async (req, res) => {
     // Save new OTP to database with userId
     try {
       await OTP.create({
-        userId: user.id,
-        email: user.email,
+        userId: student.id,
+        email: student.email,
         phone_number,
         otp_code: otpCode,
         is_verified: false,
@@ -443,16 +431,23 @@ exports.login = async (req, res) => {
   try {
     const { phone_number, password, otp_code } = req.body;
 
+    // Validate required fields
+    if (!phone_number) {
+      return res.status(400).json({
+        message: 'phone_number is required',
+      });
+    }
+
     // Case 1: Phone Number + Password login
     if (phone_number && password && !otp_code) {
-      const user = await User.findOne({ where: { phone_number } });
-      if (!user) {
+      const student = await Enquiry.findOne({ where: { phone: phone_number } });
+      if (!student) {
         return res.status(401).json({
           message: 'Invalid credentials',
         });
       }
 
-      const isValid = await comparePassword(password, user.password);
+      const isValid = await comparePassword(password, student.password);
       if (!isValid) {
         return res.status(401).json({
           message: 'Invalid credentials',
@@ -460,31 +455,30 @@ exports.login = async (req, res) => {
       }
 
       const token = await signToken({
-        userId: user.id,
-        name: user.name,
-        email: user.email,
-        phone_number: user.phone_number,
-        role: user.role,
+        userId: student.id,
+        name: student.name,
+        email: student.email,
+        phone_number: student.phone,
+        role: 'student',
       });
 
       return res.json({
         message: 'Login successful',
         token,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          phone_number: user.phone_number,
-          role: user.role,
+        student: {
+          id: student.id,
+          name: student.name,
+          email: student.email,
+          phone_number: student.phone,
         },
       });
     }
 
     // Case 2: Phone Number + OTP login
     else if (phone_number && otp_code && !password) {
-      // Find user by phone number
-      const user = await User.findOne({ where: { phone_number } });
-      if (!user) {
+      // Find student by phone number
+      const student = await Enquiry.findOne({ where: { phone: phone_number } });
+      if (!student) {
         return res.status(401).json({
           message: 'Invalid credentials',
         });
@@ -510,30 +504,29 @@ exports.login = async (req, res) => {
 
       // Generate token
       const token = await signToken({
-        userId: user.id,
-        name: user.name,
-        email: user.email,
-        phone_number: user.phone_number,
-        role: user.role,
+        userId: student.id,
+        name: student.name,
+        email: student.email,
+        phone_number: student.phone,
+        role: 'student',
       });
 
-      // Mark OTP as used (optional - delete or update is_verified flag)
+      // Mark OTP as used (delete it)
       await otpRecord.destroy();
 
       return res.json({
         message: 'Login successful',
         token,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          phone_number: user.phone_number,
-          role: user.role,
+        student: {
+          id: student.id,
+          name: student.name,
+          email: student.email,
+          phone_number: student.phone,
         },
       });
     }
 
-    // Case 2: Invalid combination of parameters
+    // Case 3: Invalid combination of parameters
     else {
       return res.status(400).json({
         message: 'Invalid login method. Provide either: (1) phone_number+password, or (2) phone_number+otp_code',
@@ -548,7 +541,7 @@ exports.login = async (req, res) => {
   }
 };
 
-exports.checkUserExists = async (req, res) => {
+exports.checkStudentExists = async (req, res) => {
   try {
     const { phone_number } = req.body;
 
@@ -560,29 +553,28 @@ exports.checkUserExists = async (req, res) => {
       });
     }
 
-    // Check if user exists
-    const user = await User.findOne({ where: { phone_number } });
+    // Check if student exists
+    const student = await Enquiry.findOne({ where: { phone: phone_number } });
 
-    if (user) {
+    if (student) {
       return res.status(200).json({
-        message: 'User exists',
+        message: 'Student exists',
         exists: true,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          phone_number: user.phone_number,
-          role: user.role,
+        student: {
+          id: student.id,
+          name: student.name,
+          email: student.email,
+          phone_number: student.phone,
         },
       });
     } else {
       return res.status(200).json({
-        message: 'User does not exist',
+        message: 'Student does not exist',
         exists: false,
       });
     }
   } catch (error) {
-    console.error('Check user exists error:', error.message);
+    console.error('Check student exists error:', error.message);
     return res.status(500).json({
       message: 'Server error',
       error: error.message,
