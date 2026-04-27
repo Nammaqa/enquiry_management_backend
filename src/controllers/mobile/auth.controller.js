@@ -465,6 +465,7 @@ exports.login = async (req, res) => {
           email: student.email,
           phone_number: student.phone,
         },
+        enquiryId: student.id,
       });
     }
 
@@ -517,6 +518,7 @@ exports.login = async (req, res) => {
           email: student.email,
           phone_number: student.phone,
         },
+        enquiryId: student.id,
       });
     }
 
