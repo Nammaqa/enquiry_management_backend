@@ -29,7 +29,7 @@ exports.signup = async (req, res) => {
       });
     }
 
-    // Check if email or phone already exists
+    // Check if email or phone already exist
     const existingEmail = await Enquiry.findOne({ where: { email } });
     const existingPhone = await Enquiry.findOne({ where: { phone: phone_number } });
 
