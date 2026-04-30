@@ -64,7 +64,6 @@ exports.createSubject = async (req, res) => {
     const overview = fields.overview ? (Array.isArray(fields.overview) ? fields.overview[0] : fields.overview) : null;
     const syllabus = fields.syllabus ? (Array.isArray(fields.syllabus) ? fields.syllabus[0] : fields.syllabus) : null;
     const prerequisites = fields.prerequisites ? (Array.isArray(fields.prerequisites) ? fields.prerequisites[0] : fields.prerequisites) : null;
-    const fees = fields.fees ? (Array.isArray(fields.fees) ? fields.fees[0] : fields.fees) : null;
     const domain = fields.domain ? (Array.isArray(fields.domain) ? fields.domain[0] : fields.domain) : null;
     const mode = fields.mode ? (Array.isArray(fields.mode) ? fields.mode[0] : fields.mode) : null;
 
@@ -114,7 +113,6 @@ exports.createSubject = async (req, res) => {
       overview: safeJsonParse(overview),
       syllabus: safeJsonParse(syllabus),
       prerequisites: safeJsonParse(prerequisites),
-      fees: fees || null,
       domain,
       mode,
     });
@@ -135,11 +133,11 @@ exports.createSubject = async (req, res) => {
 exports.getAllSubjects = async (req, res) => {
   try {
     const subjects = await Subject.findAll({
-      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'domain', 'mode', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'domain', 'mode', 'createdAt', 'updatedAt'],
       include: {
         model: require('../models').Package,
         as: 'packages',
-        attributes: ['id', 'name', 'code', 'fees'],
+        attributes: ['id', 'name', 'code'],
         through: { attributes: [] },
       },
     });
@@ -187,12 +185,12 @@ exports.getSubjectsByInstructor = async (req, res) => {
     // Find all subjects with those IDs
     const subjects = await Subject.findAll({
       where: { id: subjectIds },
-      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'createdAt', 'updatedAt'],
       include: [
         {
           model: PackageModel,
           as: 'packages',
-          attributes: ['id', 'name', 'code', 'fees'],
+          attributes: ['id', 'name', 'code'],
           through: { attributes: [] },
         },
       ],
@@ -221,11 +219,11 @@ exports.getSubjectsByInstructor = async (req, res) => {
 exports.getSubjectById = async (req, res) => {
   try {
     const subject = await Subject.findByPk(req.params.id, {
-      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'createdAt', 'updatedAt'],
       include: {
         model: require('../models').Package,
         as: 'packages',
-        attributes: ['id', 'name', 'code', 'fees'],
+        attributes: ['id', 'name', 'code'],
         through: { attributes: [] },
       },
     });
@@ -299,7 +297,6 @@ exports.updateSubject = async (req, res) => {
     const overview = fields.overview ? (Array.isArray(fields.overview) ? fields.overview[0] : fields.overview) : null;
     const syllabus = fields.syllabus ? (Array.isArray(fields.syllabus) ? fields.syllabus[0] : fields.syllabus) : null;
     const prerequisites = fields.prerequisites ? (Array.isArray(fields.prerequisites) ? fields.prerequisites[0] : fields.prerequisites) : null;
-    const fees = fields.fees ? (Array.isArray(fields.fees) ? fields.fees[0] : fields.fees) : null;
     const domain = fields.domain ? (Array.isArray(fields.domain) ? fields.domain[0] : fields.domain) : null;
     const mode = fields.mode ? (Array.isArray(fields.mode) ? fields.mode[0] : fields.mode) : null;
 
@@ -348,7 +345,6 @@ exports.updateSubject = async (req, res) => {
       overview: overview !== undefined ? safeJsonParse(overview) : subject.overview,
       syllabus: syllabus !== undefined ? safeJsonParse(syllabus) : subject.syllabus,
       prerequisites: prerequisites !== undefined ? safeJsonParse(prerequisites) : subject.prerequisites,
-      fees: fees !== undefined ? fees : subject.fees,
       domain: domain !== undefined && domain !== null ? domain : subject.domain,
       mode: mode !== undefined && mode !== null ? mode : subject.mode,
     });
@@ -403,7 +399,7 @@ exports.deleteSubject = async (req, res) => {
 };
 
 /**
- * GET subject fees by IDs list (ALL ROLES)
+ * GET subjects by IDs list (ALL ROLES)
  */
 exports.getSubjectFeesByIds = async (req, res) => {
   try {
@@ -437,7 +433,7 @@ exports.getSubjectFeesByIds = async (req, res) => {
       where: {
         id: subjectIds
       },
-      attributes: ['id', 'name', 'code', 'fees']
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration']
     });
 
     if (subjects.length === 0) {
@@ -458,5 +454,3 @@ exports.getSubjectFeesByIds = async (req, res) => {
     });
   }
 };
-
-//formidable functions are async

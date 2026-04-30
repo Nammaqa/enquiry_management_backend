@@ -191,41 +191,6 @@ exports.createEnquiry = async (req, res) => {
       passwordChanged: false,
     });
 
-    // Calculate total fees from package and subjects
-    let totalFees = 0;
-
-    // Get package fees if packageId is provided
-    if (packageId) {
-      const pkg = await Package.findByPk(packageId, { attributes: ['fees'] });
-      if (pkg && pkg.fees) {
-        totalFees += pkg.fees;
-      }
-    }
-
-    // Get subject fees if subjectIds are provided
-    if (subjectIds && subjectIds.length > 0) {
-      const subjects = await Subject.findAll({
-        where: { id: subjectIds },
-        attributes: ['id', 'fees']
-      });
-      subjects.forEach(subject => {
-        if (subject.fees) {
-          totalFees += subject.fees;
-        }
-      });
-    }
-
-    // Create billing record with calculated total fees
-    if (totalFees > 0 || packageId || (subjectIds && subjectIds.length > 0)) {
-      await Billing.create({
-        enquiryId: enquiry.id,
-        packageCost: totalFees,
-        amountPaid: 0,
-        discount: 0,
-        balance: totalFees,
-      });
-    }
-
     res.status(201).json({
       success: true,
       message: 'Enquiry created successfully',
@@ -248,7 +213,6 @@ exports.createEnquiry = async (req, res) => {
         consent: enquiry.consent,
         candidateStatus: enquiry.candidateStatus,
         createdAt: enquiry.createdAt,
-        totalFees: totalFees,
       }
     });
   } catch (error) {
@@ -374,8 +338,8 @@ exports.updateEnquiry = async (req, res) => {
       consent,
       candidateStatus,
       passwordChanged,
-      globalUser,
       global,
+      targetedFees
     } = req.body;
 
     const normalizedPhone = phone?.replace(/\D/g, '');
@@ -523,6 +487,7 @@ exports.updateEnquiry = async (req, res) => {
     if (startTime !== undefined) updateData.startTime = startTime?.trim() || null;
     if (referral !== undefined) updateData.referral = referral?.trim() || null;
     if (consent !== undefined) updateData.consent = consent;
+    if(targetedFees!== undefined) updateData.targetedFees= targetedFees ;
     if (candidateStatus !== undefined) updateData.candidateStatus = candidateStatus;
     if (passwordChanged !== undefined) updateData.passwordChanged = passwordChanged;
     if (global !== undefined) updateData.global = global;
@@ -553,6 +518,7 @@ exports.updateEnquiry = async (req, res) => {
         candidateStatus: enquiry.candidateStatus,
         passwordChanged: enquiry.passwordChanged,
         global: enquiry.global,
+        targetedFees:enquiry.targetedFees,
         updatedAt: enquiry.updatedAt,
       }
     });
