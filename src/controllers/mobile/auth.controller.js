@@ -169,11 +169,10 @@ exports.verifyOTP = async (req, res) => {
 
     // Generate JWT token
     const token = await signToken({
-      userId: student.id,
+      enquiryId: student.id,
       name: student.name,
       email: student.email,
       phone_number: student.phone,
-      role: 'student',
     });
 
     return res.status(200).json({
@@ -456,11 +455,10 @@ exports.login = async (req, res) => {
       }
 
       const token = await signToken({
-        userId: student.id,
+        enquiryId: student.id,
         name: student.name,
         email: student.email,
         phone_number: student.phone,
-        role: 'student',
       });
 
       return res.json({
@@ -505,11 +503,10 @@ exports.login = async (req, res) => {
 
       // Generate token
       const token = await signToken({
-        userId: student.id,
+        enquiryId: student.id,
         name: student.name,
         email: student.email,
         phone_number: student.phone,
-        role: 'student',
       });
 
       // Mark OTP as used (delete it)

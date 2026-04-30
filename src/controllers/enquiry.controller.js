@@ -187,7 +187,7 @@ exports.createEnquiry = async (req, res) => {
       consent: consent || false,
       candidateStatus: candidateStatus || 'enquiry stage',
       password: hashedPassword,
-      globalUser: false,
+      global: false,
       passwordChanged: false,
     });
 
@@ -274,6 +274,7 @@ exports.createEnquiry = async (req, res) => {
 exports.getAllEnquiries = async (req, res) => {
   try {
     const enquiries = await Enquiry.findAll({
+      where: { global: true },
       attributes: { exclude: ['password'] },
       include: [
         {
@@ -469,11 +470,6 @@ exports.updateEnquiry = async (req, res) => {
       return res.status(400).json({ message: 'passwordChanged must be a boolean value' });
     }
 
-    // Validate globalUser if provided
-    if (globalUser !== undefined && typeof globalUser !== 'boolean') {
-      return res.status(400).json({ message: 'globalUser must be a boolean value' });
-    }
-
     // Validate global if provided
     if (global !== undefined && typeof global !== 'boolean') {
       return res.status(400).json({ message: 'global must be a boolean value' });
@@ -528,7 +524,6 @@ exports.updateEnquiry = async (req, res) => {
     if (consent !== undefined) updateData.consent = consent;
     if (candidateStatus !== undefined) updateData.candidateStatus = candidateStatus;
     if (passwordChanged !== undefined) updateData.passwordChanged = passwordChanged;
-    if (globalUser !== undefined) updateData.globalUser = globalUser;
     if (global !== undefined) updateData.global = global;
 
     await enquiry.update(updateData);
@@ -556,7 +551,6 @@ exports.updateEnquiry = async (req, res) => {
         consent: enquiry.consent,
         candidateStatus: enquiry.candidateStatus,
         passwordChanged: enquiry.passwordChanged,
-        globalUser: enquiry.globalUser,
         global: enquiry.global,
         updatedAt: enquiry.updatedAt,
       }
@@ -647,5 +641,79 @@ exports.changeEnquiryStatus = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * ENROLL Student (Mobile App)
+ * Called by student from mobile app to confirm enrollment
+ * Sets global to true (makes enquiry visible in admin UI) and updates status
+ */
+exports.enrollStudent = async (req, res) => {
+  try {
+    // Get enquiryId from JWT token (set by sharedAuth middleware)
+    const enquiryId = req.enquiry?.enquiryId || req.body?.enquiryId;
+
+    // Validate that we have an enquiryId
+    if (!enquiryId) {
+      return res.status(400).json({
+        message: 'Invalid request: Unable to identify student',
+      });
+    }
+
+    // Find the enquiry
+    const enquiry = await Enquiry.findByPk(enquiryId);
+    if (!enquiry) {
+      return res.status(404).json({
+        message: 'Student record not found',
+      });
+    }
+
+    // Check if already enrolled
+    if (enquiry.global === true) {
+      return res.status(400).json({
+        message: 'Student is already enrolled',
+      });
+    }
+
+    // Update global to true (now visible in admin UI) and set candidateStatus to 'class'
+    await enquiry.update({
+      global: false,
+      candidateStatus: 'enquiry stage',
+    });
+
+  
+    return res.status(200).json({
+      success: true,
+      message: 'Enrollment completed successfully. Your record is now visible to the admin team.',
+      data: {
+        id: enquiry.id,
+        name: enquiry.name,
+        email: enquiry.email,
+        phone: enquiry.phone,
+        current_location: enquiry.current_location,
+        profession: enquiry.profession,
+        qualification: enquiry.qualification,
+        experience: enquiry.experience,
+        packageId: enquiry.packageId,
+        batchId: enquiry.batchId,
+        subjectIds: enquiry.subjectIds,
+        trainingMode: enquiry.trainingMode,
+        trainingTime: enquiry.trainingTime,
+        startTime: enquiry.startTime,
+        referral: enquiry.referral,
+        consent: enquiry.consent,
+        candidateStatus: enquiry.candidateStatus,
+        global: enquiry.global,
+        enrolledAt: enquiry.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error('Enrollment error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error completing enrollment',
+      error: error.message,
+    });
   }
 };
