@@ -29,86 +29,78 @@ exports.signup = async (req, res) => {
       });
     }
 
-    // Check if email already exists
+    // Check if email or phone already exist
     const existingEmail = await Enquiry.findOne({ where: { email } });
-    if (existingEmail) {
-      return res.status(409).json({
-        message: 'Email already exists',
-      });
-    }
-
-    // Check if phone number already exists
     const existingPhone = await Enquiry.findOne({ where: { phone: phone_number } });
-    if (existingPhone) {
-      return res.status(409).json({
-        message: 'Phone number already exists',
-      });
-    }
 
-    // Hash password
-    const hashedPassword = await hashPassword(password);
+    let student;
 
-    // Create student account in Enquiry table
-    try {
-      const newStudent = await Enquiry.create({
+    // If enquiry already exists, reuse it instead of throwing error
+    if (existingEmail || existingPhone) {
+      student = existingEmail || existingPhone;
+      console.log('Existing enquiry found, reusing for signup:', student.id);
+    } else {
+      // Create new student account in Enquiry table
+      // Hash password
+      const hashedPassword = await hashPassword(password);
+
+      student = await Enquiry.create({
         name: fullName,
         email,
         phone: phone_number,
         password: hashedPassword,
-        candidateStatus:'enquiry stage'
+        candidateStatus: 'enquiry stage',
+        globalUser: false,
       });
 
-      // Generate OTP
-      const otpCode = generateOTP();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      console.log('New enquiry created during signup:', student.id);
+    }
 
-      // Delete any existing OTP for this phone
-      try {
-        await OTP.destroy({ where: { phone_number } });
-      } catch (err) {
-        console.error('Error deleting old OTP:', err.message);
-      }
+    // Generate OTP
+    const otpCode = generateOTP();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-      // Save OTP to database
-      const otpRecord = await OTP.create({
-        userId: newStudent.id,
-        email,
-        phone_number,
-        fullName,
-        otp_code: otpCode,
-        is_verified: false,
-        expires_at: expiresAt,
-      });
-
-      // Send OTP via SMS
-      const smsResult = await sendOTPViaSMS(phone_number, otpCode);
-
-      if (!smsResult.success) {
-        return res.status(500).json({
-          message: 'Failed to send OTP',
-          error: smsResult.error,
-        });
-      }
-
-      return res.status(200).json({
-        message: 'OTP sent successfully to your phone',
-        student: {
-          id: newStudent.id,
-          name: newStudent.name,
-          email: newStudent.email,
-          phone_number: newStudent.phone,
-        },
-        reference_id: otpRecord.id,
-        expiresIn: '10 minutes',
-        next: 'Verify OTP using /api/mobile/auth/verify-otp endpoint',
-      });
+    // Delete any existing OTP for this phone
+    try {
+      await OTP.destroy({ where: { phone_number } });
     } catch (err) {
-      console.error('Error in signup process:', err.message);
+      console.error('Error deleting old OTP:', err.message);
+    }
+
+    // Save OTP to database
+    const otpRecord = await OTP.create({
+      userId: student.id,
+      email,
+      phone_number,
+      fullName,
+      otp_code: otpCode,
+      is_verified: false,
+      expires_at: expiresAt,
+    });
+
+    // Send OTP via SMS
+    const smsResult = await sendOTPViaSMS(phone_number, otpCode);
+
+    if (!smsResult.success) {
       return res.status(500).json({
-        message: 'Failed to complete signup',
-        error: err.message,
+        message: 'Failed to send OTP',
+        error: smsResult.error,
       });
     }
+
+    return res.status(200).json({
+      message: 'OTP sent successfully to your phone',
+      student: {
+        id: student.id,
+        name: student.name,
+        email: student.email,
+        phone_number: student.phone,
+      },
+      enquiryId: student.id,
+      reference_id: otpRecord.id,
+      expiresIn: '10 minutes',
+      next: 'Verify OTP using /api/mobile/auth/verify-otp endpoint',
+    });
   } catch (error) {
     console.error('Signup error:', error.message);
     return res.status(500).json({
@@ -167,6 +159,10 @@ exports.verifyOTP = async (req, res) => {
     otpRecord.is_verified = true;
     await otpRecord.save();
 
+    // Mark signup as verified in Enquiry table
+    student.isSignupVerified = true;
+    await student.save();
+
     // Generate JWT token
     const token = await signToken({
       enquiryId: student.id,
@@ -184,6 +180,7 @@ exports.verifyOTP = async (req, res) => {
         email: student.email,
         phone_number: student.phone,
       },
+      enquiryId: student.id,
     });
   } catch (error) {
     console.error('OTP verification error:', error.message);
@@ -447,6 +444,13 @@ exports.login = async (req, res) => {
         });
       }
 
+      // Check if signup was verified
+      if (!student.isSignupVerified) {
+        return res.status(403).json({
+          message: 'Account not verified. Please complete OTP verification during signup.',
+        });
+      }
+
       const isValid = await comparePassword(password, student.password);
       if (!isValid) {
         return res.status(401).json({
@@ -470,6 +474,7 @@ exports.login = async (req, res) => {
           email: student.email,
           phone_number: student.phone,
         },
+        enquiryId: student.id,
       });
     }
 
@@ -480,6 +485,13 @@ exports.login = async (req, res) => {
       if (!student) {
         return res.status(401).json({
           message: 'Invalid credentials',
+        });
+      }
+
+      // Check if signup was verified
+      if (!student.isSignupVerified) {
+        return res.status(403).json({
+          message: 'Account not verified. Please complete OTP verification during signup.',
         });
       }
 
@@ -521,6 +533,7 @@ exports.login = async (req, res) => {
           email: student.email,
           phone_number: student.phone,
         },
+        enquiryId: student.id,
       });
     }
 

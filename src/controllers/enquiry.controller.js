@@ -309,7 +309,8 @@ exports.updateEnquiry = async (req, res) => {
   try {
     // Check if user role is COUNSELLOR, ADMIN, or ACCOUNTS
     const userrole = req.user.role;
-    if (userrole !== 'COUNSELLOR' && userrole !== 'ADMIN' && userrole !== 'ACCOUNTS') {
+    console.log('User role:', userrole);
+    if (userrole !== 'COUNSELLOR' && userrole !== 'ADMIN' && userrole !== 'ACCOUNTS' && userrole !== 'student') {
       return res.status(403).json({ message: 'You do not have permission to update enquiries. Please contact your administrator.' });
     }
 
