@@ -159,6 +159,10 @@ exports.verifyOTP = async (req, res) => {
     otpRecord.is_verified = true;
     await otpRecord.save();
 
+    // Mark signup as verified in Enquiry table
+    student.isSignupVerified = true;
+    await student.save();
+
     // Generate JWT token
     const token = await signToken({
       userId: student.id,
@@ -441,6 +445,13 @@ exports.login = async (req, res) => {
         });
       }
 
+      // Check if signup was verified
+      if (!student.isSignupVerified) {
+        return res.status(403).json({
+          message: 'Account not verified. Please complete OTP verification during signup.',
+        });
+      }
+
       const isValid = await comparePassword(password, student.password);
       if (!isValid) {
         return res.status(401).json({
@@ -476,6 +487,13 @@ exports.login = async (req, res) => {
       if (!student) {
         return res.status(401).json({
           message: 'Invalid credentials',
+        });
+      }
+
+      // Check if signup was verified
+      if (!student.isSignupVerified) {
+        return res.status(403).json({
+          message: 'Account not verified. Please complete OTP verification during signup.',
         });
       }
 

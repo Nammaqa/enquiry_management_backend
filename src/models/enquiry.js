@@ -99,6 +99,11 @@ module.exports = (sequelize, DataTypes) => {
                 allowNull: false,
                 defaultValue: 'enquiry stage',
             },
+            isSignupVerified: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: false,
+                allowNull: false,
+            },
         },
         {
             tableName: 'enquiries',
