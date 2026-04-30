@@ -95,6 +95,11 @@ module.exports = (sequelize, DataTypes) => {
                 allowNull: false,
                 defaultValue: 'enquiry stage',
             },
+            targetedFees: {
+                type: DataTypes.JSON,
+                allowNull: true,
+                defaultValue: null,
+            },
         },
         {
             tableName: 'enquiries',
