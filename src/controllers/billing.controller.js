@@ -48,12 +48,16 @@ exports.createOrUpdateBilling = async (req, res) => {
       const balance = totalCost - amountPaid;
 
       if (billing) {
+        // ACCUMULATE the new payment with existing amount paid
+        const newTotalAmountPaid = parseFloat((parseFloat(billing.amountPaid) + parseFloat(amountPaid)).toFixed(2));
+        const newBalance = parseFloat((totalCost - newTotalAmountPaid).toFixed(2));
+        
         billing.packageCost = packageCost;
-        billing.amountPaid = amountPaid;
+        billing.amountPaid = newTotalAmountPaid;
         billing.discount = finalDiscount;
         billing.gst = gstPercentage;
         billing.gstAmount = parseFloat(gstAmount.toFixed(2));
-        billing.balance = parseFloat(balance.toFixed(2));
+        billing.balance = newBalance;
         billing.packageType = 'package';
         billing.subjectIds = null;
         billing.subjectWiseBreakdown = null;
@@ -125,12 +129,16 @@ exports.createOrUpdateBilling = async (req, res) => {
       const balance = totalCost - totalAmountPaid;
 
       if (billing) {
+        // ACCUMULATE the new payment with existing amount paid
+        const newTotalAmountPaidIndividual = parseFloat((parseFloat(billing.amountPaid) + parseFloat(totalAmountPaid)).toFixed(2));
+        const newBalanceIndividual = parseFloat((totalCost - newTotalAmountPaidIndividual).toFixed(2));
+        
         billing.packageCost = parseFloat(totalPackageCost.toFixed(2));
-        billing.amountPaid = parseFloat(totalAmountPaid.toFixed(2));
+        billing.amountPaid = newTotalAmountPaidIndividual;
         billing.discount = finalDiscount;
         billing.gst = gstPercentage;
         billing.gstAmount = parseFloat(gstAmount.toFixed(2));
-        billing.balance = parseFloat(balance.toFixed(2));
+        billing.balance = newBalanceIndividual;
         billing.packageType = 'individual';
         billing.subjectIds = subjectIds;
         billing.subjectWiseBreakdown = breakdown;
@@ -300,12 +308,16 @@ exports.updateBilling = async (req, res) => {
       const totalCost = costAfterDiscount + gstAmount;
       const balance = totalCost - amountPaid;
 
+      // ACCUMULATE the new payment with existing amount paid
+      const newTotalAmountPaid = parseFloat((parseFloat(billing.amountPaid) + parseFloat(amountPaid)).toFixed(2));
+      const newBalance = parseFloat((totalCost - newTotalAmountPaid).toFixed(2));
+
       billing.packageCost = packageCost;
-      billing.amountPaid = amountPaid;
+      billing.amountPaid = newTotalAmountPaid;
       billing.discount = finalDiscount;
       billing.gst = gstPercentage;
       billing.gstAmount = parseFloat(gstAmount.toFixed(2));
-      billing.balance = parseFloat(balance.toFixed(2));
+      billing.balance = newBalance;
       billing.packageType = 'package';
       billing.subjectIds = null;
       billing.subjectWiseBreakdown = null;
@@ -359,12 +371,16 @@ exports.updateBilling = async (req, res) => {
       const totalCost = costAfterDiscount + gstAmount;
       const balance = totalCost - totalAmountPaid;
 
+      // ACCUMULATE the new payment with existing amount paid
+      const newTotalAmountPaidIndividual = parseFloat((parseFloat(billing.amountPaid) + parseFloat(totalAmountPaid)).toFixed(2));
+      const newBalanceIndividual = parseFloat((totalCost - newTotalAmountPaidIndividual).toFixed(2));
+
       billing.packageCost = parseFloat(totalPackageCost.toFixed(2));
-      billing.amountPaid = parseFloat(totalAmountPaid.toFixed(2));
+      billing.amountPaid = newTotalAmountPaidIndividual;
       billing.discount = finalDiscount;
       billing.gst = gstPercentage;
       billing.gstAmount = parseFloat(gstAmount.toFixed(2));
-      billing.balance = parseFloat(balance.toFixed(2));
+      billing.balance = newBalanceIndividual;
       billing.packageType = 'individual';
       billing.subjectIds = subjectIds;
       billing.subjectWiseBreakdown = breakdown;
