@@ -32,6 +32,7 @@ exports.createEnquiry = async (req, res) => {
       phone,
 
       // Personal details
+      collegeName,
       current_location,
       profession,
       qualification,
@@ -73,6 +74,7 @@ exports.createEnquiry = async (req, res) => {
     const fieldValidations = [
       validateStringLength(name, 'Name', 100),
       validateStringLength(phone.replace(/\D/g, ''), 'Phone number', 20),
+      validateStringLength(collegeName, 'College name', 100),
       validateStringLength(current_location, 'Current location', 100),
       validateStringLength(profession, 'Profession', 100),
       validateStringLength(qualification, 'Qualification', 100),
@@ -173,6 +175,7 @@ exports.createEnquiry = async (req, res) => {
       name: name.trim(),
       email: email.toLowerCase().trim(),
       phone: phone.replace(/\D/g, ''),
+      collegeName: collegeName?.trim() || null,
       current_location: current_location?.trim() || null,
       profession: profession?.trim() || null,
       qualification: qualification?.trim() || null,
@@ -199,6 +202,7 @@ exports.createEnquiry = async (req, res) => {
         name: enquiry.name,
         email: enquiry.email,
         phone: enquiry.phone,
+        collegeName: enquiry.collegeName,
         current_location: enquiry.current_location,
         profession: enquiry.profession,
         qualification: enquiry.qualification,
@@ -324,6 +328,7 @@ exports.updateEnquiry = async (req, res) => {
       email,
       phone,
       password,
+      collegeName,
       current_location,
       profession,
       qualification,
@@ -404,6 +409,7 @@ exports.updateEnquiry = async (req, res) => {
     // Validate text field lengths on update
     const lengthValidations = [
       validateStringLength(name, 'Name', 100),
+      validateStringLength(collegeName, 'College name', 100),
       validateStringLength(current_location, 'Current location', 100),
       validateStringLength(profession, 'Profession', 100),
       validateStringLength(qualification, 'Qualification', 100),
@@ -475,6 +481,7 @@ exports.updateEnquiry = async (req, res) => {
     if (email !== undefined) updateData.email = email.toLowerCase().trim();
     if (phone !== undefined) updateData.phone = phone.replace(/\D/g, '');
     if (password !== undefined) updateData.password = password;
+    if (collegeName !== undefined) updateData.collegeName = collegeName?.trim() || null;
     if (current_location !== undefined) updateData.current_location = current_location?.trim() || null;
     if (profession !== undefined) updateData.profession = profession?.trim() || null;
     if (qualification !== undefined) updateData.qualification = qualification?.trim() || null;
@@ -503,6 +510,7 @@ exports.updateEnquiry = async (req, res) => {
         email: enquiry.email,
         phone: enquiry.phone,
         password: enquiry.password ? '***' : null,
+        collegeName: enquiry.collegeName,
         current_location: enquiry.current_location,
         profession: enquiry.profession,
         qualification: enquiry.qualification,
@@ -658,6 +666,7 @@ exports.enrollStudent = async (req, res) => {
         name: enquiry.name,
         email: enquiry.email,
         phone: enquiry.phone,
+        collegeName: enquiry.collegeName,
         current_location: enquiry.current_location,
         profession: enquiry.profession,
         qualification: enquiry.qualification,
