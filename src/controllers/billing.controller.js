@@ -44,7 +44,7 @@ exports.createOrUpdateBilling = async (req, res) => {
       
       const costAfterDiscount = packageCost - finalDiscount;
       const gstAmount = costAfterDiscount * (gstPercentage / 100);
-      const totalCost = costAfterDiscount + gstAmount;
+      const totalCost = costAfterDiscount;  // Package cost already includes GST
       const balance = totalCost - amountPaid;
 
       if (billing) {
@@ -125,7 +125,7 @@ exports.createOrUpdateBilling = async (req, res) => {
 
       const costAfterDiscount = totalPackageCost - finalDiscount;
       const gstAmount = costAfterDiscount * (gstPercentage / 100);
-      const totalCost = costAfterDiscount + gstAmount;
+      const totalCost = costAfterDiscount;  // Package cost already includes GST
       const balance = totalCost - totalAmountPaid;
 
       if (billing) {
@@ -305,7 +305,7 @@ exports.updateBilling = async (req, res) => {
       
       const costAfterDiscount = packageCost - finalDiscount;
       const gstAmount = costAfterDiscount * (gstPercentage / 100);
-      const totalCost = costAfterDiscount + gstAmount;
+      const totalCost = costAfterDiscount;  // Package cost already includes GST
       const balance = totalCost - amountPaid;
 
       // ACCUMULATE the new payment with existing amount paid
@@ -368,7 +368,7 @@ exports.updateBilling = async (req, res) => {
 
       const costAfterDiscount = totalPackageCost - finalDiscount;
       const gstAmount = costAfterDiscount * (gstPercentage / 100);
-      const totalCost = costAfterDiscount + gstAmount;
+      const totalCost = costAfterDiscount;  // Package cost already includes GST
       const balance = totalCost - totalAmountPaid;
 
       // ACCUMULATE the new payment with existing amount paid

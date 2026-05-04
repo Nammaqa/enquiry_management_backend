@@ -33,6 +33,10 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.STRING(20),
                 allowNull: true,
             },
+            collegeName: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+            },
             current_location: {
                 type: DataTypes.STRING(100),
                 allowNull: true,
