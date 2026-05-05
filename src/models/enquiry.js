@@ -98,12 +98,7 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.ENUM('demo', 'qualified demo', 'class', 'class qualified', 'placement', 'enquiry stage'),
                 allowNull: false,
                 defaultValue: 'enquiry stage',
-            },
-            targetedFees: {
-                type: DataTypes.JSON,
-                allowNull: true,
-                defaultValue: null,
-            },
+            }
         },
         {
             tableName: 'enquiries',

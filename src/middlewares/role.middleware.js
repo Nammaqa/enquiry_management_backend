@@ -1,15 +1,26 @@
 module.exports = (roles) => {
   return (req, res, next) => {
-    const userRole = req.user.role;
-    
+    const userRole = req.user?.role; // ✅ SAFE ACCESS
+
+    // 🔥 HANDLE MISSING ROLE
+    if (!userRole) {
+      return res.status(401).json({
+        message: "User role missing in token",
+      });
+    }
+
     // Convert single role to array
     const allowedRoles = Array.isArray(roles) ? roles : [roles];
-    
-    // Check if user's role matches any of the allowed roles
-    // Check if user's role matches any of the allowed roles (case-insensitive)
-    if (!allowedRoles.some(role => role.toUpperCase() === userRole.toUpperCase())) {
-      return res.status(403).json({ message: 'Access denied' });
+
+    // ✅ SAFE COMPARISON
+    const hasAccess = allowedRoles.some(
+      role => role.toUpperCase() === userRole.toUpperCase()
+    );
+
+    if (!hasAccess) {
+      return res.status(403).json({ message: "Access denied" });
     }
+
     next();
   };
 };

@@ -169,6 +169,7 @@ exports.verifyOTP = async (req, res) => {
       name: student.name,
       email: student.email,
       phone_number: student.phone,
+      role: 'student',
     });
 
     return res.status(200).json({
@@ -463,6 +464,7 @@ exports.login = async (req, res) => {
         name: student.name,
         email: student.email,
         phone_number: student.phone,
+        role: 'student',
       });
 
       return res.json({
@@ -519,6 +521,7 @@ exports.login = async (req, res) => {
         name: student.name,
         email: student.email,
         phone_number: student.phone,
+        role : 'student',
       });
 
       // Mark OTP as used (delete it)
