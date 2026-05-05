@@ -46,7 +46,7 @@ exports.createPackage = async (req, res) => {
       });
     }
 
-    let name, code, description, type, duration, startDate, packageType, overview, syllabus, prerequisites, subjectIds, fees, domain, mode, imageUrl = null;
+    let name, code, description, type, duration, startDate, packageType, overview, syllabus, prerequisites, subjectIds, domain, mode, imageUrl = null;
 
     // Check if request has files (multipart/form-data) or is JSON
     if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
@@ -70,7 +70,6 @@ exports.createPackage = async (req, res) => {
       overview = getFieldValue(fields.overview);
       syllabus = getFieldValue(fields.syllabus);
       prerequisites = getFieldValue(fields.prerequisites);
-      fees = getFieldValue(fields.fees);
       domain = getFieldValue(fields.domain);
       mode = getFieldValue(fields.mode);
       subjectIds = parseSubjectIds(fields.subjectIds);
@@ -92,7 +91,7 @@ exports.createPackage = async (req, res) => {
     }
     } else {
       // Handle JSON request
-      const { name: reqName, code: reqCode, description: reqDescription, type: reqType, duration: reqDuration, startDate: reqStartDate, packageType: reqPackageType, overview: reqOverview, syllabus: reqSyllabus, prerequisites: reqPrerequisites, fees: reqFees, domain: reqDomain, mode: reqMode, subjectIds: reqSubjectIds } = req.body;
+      const { name: reqName, code: reqCode, description: reqDescription, type: reqType, duration: reqDuration, startDate: reqStartDate, packageType: reqPackageType, overview: reqOverview, syllabus: reqSyllabus, prerequisites: reqPrerequisites, domain: reqDomain, mode: reqMode, subjectIds: reqSubjectIds } = req.body;
       name = reqName;
       code = reqCode;
       description = reqDescription;
@@ -103,7 +102,6 @@ exports.createPackage = async (req, res) => {
       overview = reqOverview;
       syllabus = reqSyllabus;
       prerequisites = reqPrerequisites;
-      fees = Number(reqFees);
       domain = reqDomain;
       mode = reqMode;
       subjectIds = reqSubjectIds;
@@ -167,14 +165,12 @@ exports.createPackage = async (req, res) => {
       duration: duration ? parseInt(duration) : null,
       startDate: startDate || null,
       packageType: finalPackageType,
-      fees: fees || null,
       domain,
       mode,
       image: imageUrl,
       overview: safeJsonParse(overview),
       syllabus: safeJsonParse(syllabus),
       prerequisites: safeJsonParse(prerequisites),
-      fees: fees || null,
     });
 
     if (subjectsArray.length > 0) {
@@ -186,7 +182,7 @@ exports.createPackage = async (req, res) => {
       include: {
         model: Subject,
         as: 'subjects',
-        attributes: ['id', 'name', 'code', 'fees'],
+        attributes: ['id', 'name', 'code'],
         through: { attributes: [] },
       },
     });
@@ -207,11 +203,11 @@ exports.createPackage = async (req, res) => {
 exports.getAllPackages = async (req, res) => {
   try {
     const packages = await Package.findAll({
-      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'domain', 'mode', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'domain', 'mode', 'createdAt', 'updatedAt'],
       include: {
         model: Subject,
         as: 'subjects',
-        attributes: ['id', 'name', 'code', 'fees'],
+        attributes: ['id', 'name', 'code'],
         through: { attributes: [] },
       },
     });
@@ -228,7 +224,7 @@ exports.getAllPackages = async (req, res) => {
 exports.getPackageById = async (req, res) => {
   try {
     const pkg = await Package.findByPk(req.params.id, {
-      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'fees', 'domain', 'mode', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'domain', 'mode', 'createdAt', 'updatedAt'],
       include: {
         model: Subject,
         as: 'subjects',
@@ -303,7 +299,6 @@ exports.updatePackage = async (req, res) => {
       const overview = getFieldValue(fields.overview);
       const syllabus = getFieldValue(fields.syllabus);
       const prerequisites = getFieldValue(fields.prerequisites);
-      const fees = getFieldValue(fields.fees);
       const domain = getFieldValue(fields.domain);
       const mode = getFieldValue(fields.mode);
       subjectIds = parseSubjectIds(fields.subjectIds);
@@ -370,14 +365,13 @@ exports.updatePackage = async (req, res) => {
       if (overview !== undefined) updateData.overview = safeJsonParse(overview);
       if (syllabus !== undefined) updateData.syllabus = safeJsonParse(syllabus);
       if (prerequisites !== undefined) updateData.prerequisites = safeJsonParse(prerequisites);
-      if (fees !== undefined) updateData.fees = fees;
       if (domain !== undefined) updateData.domain = domain;
       if (mode !== undefined) updateData.mode = mode;
       updateData.image = imageUrl;
 
     } else {
       // Handle JSON request body
-      const { name, code, description, type, duration, startDate, overview, syllabus, prerequisites, fees, domain, mode, subjectIds: subjIds } = req.body;
+      const { name, code, description, type, duration, startDate, overview, syllabus, prerequisites, domain, mode, subjectIds: subjIds } = req.body;
       subjectIds = subjIds;
 
       // Validate packageType if provided (need to get from req.body)
@@ -426,7 +420,6 @@ exports.updatePackage = async (req, res) => {
       if (overview !== undefined) updateData.overview = overview;
       if (syllabus !== undefined) updateData.syllabus = syllabus;
       if (prerequisites !== undefined) updateData.prerequisites = prerequisites;
-      if (fees !== undefined) updateData.fees = fees;
       if (domain !== undefined) updateData.domain = domain;
       if (mode !== undefined) updateData.mode = mode;
       updateData.image = imageUrl;
@@ -472,7 +465,7 @@ exports.updatePackage = async (req, res) => {
       include: {
         model: Subject,
         as: 'subjects',
-        attributes: ['id', 'name', 'code', 'fees'],
+        attributes: ['id', 'name', 'code'],
         through: { attributes: [] },
       },
       transaction
@@ -561,12 +554,12 @@ exports.deletePackage = async (req, res) => {
   }
 };
 /**
- * GET package fees by ID (ALL ROLES)
+ * GET package details by ID (ALL ROLES)
  */
 exports.getPackagePriceByid = async (req, res) => {
   try {
     const pkg = await Package.findByPk(req.params.id, {
-      attributes: ['id', 'name', 'code', 'fees']
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'packageType']
     });
 
     if (!pkg) {
@@ -579,7 +572,10 @@ exports.getPackagePriceByid = async (req, res) => {
       id: pkg.id,
       name: pkg.name,
       code: pkg.code,
-      fees: pkg.fees,
+      description: pkg.description,
+      type: pkg.type,
+      duration: pkg.duration,
+      packageType: pkg.packageType,
     });
   } catch (error) {
     console.error(error);

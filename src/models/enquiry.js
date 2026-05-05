@@ -33,6 +33,10 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.STRING(20),
                 allowNull: true,
             },
+            collegeName: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+            },
             current_location: {
                 type: DataTypes.STRING(100),
                 allowNull: true,
@@ -94,12 +98,7 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.ENUM('demo', 'qualified demo', 'class', 'class qualified', 'placement', 'enquiry stage'),
                 allowNull: false,
                 defaultValue: 'enquiry stage',
-            },
-            isSignupVerified: {
-                type: DataTypes.BOOLEAN,
-                defaultValue: false,
-                allowNull: false,
-            },
+            }
         },
         {
             tableName: 'enquiries',

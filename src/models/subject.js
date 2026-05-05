@@ -12,11 +12,6 @@ module.exports = (sequelize, DataTypes) => {
       syllabus: DataTypes.JSON,
       prerequisites: DataTypes.JSON,
       startDate: DataTypes.DATE,
-      fees: {
-        type: DataTypes.DECIMAL(10, 2),
-        allowNull: true,
-        defaultValue: 0,
-      },
       domain: DataTypes.TEXT,
       mode: DataTypes.TEXT,
     },

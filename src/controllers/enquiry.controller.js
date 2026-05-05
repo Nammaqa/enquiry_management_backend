@@ -32,6 +32,7 @@ exports.createEnquiry = async (req, res) => {
       phone,
 
       // Personal details
+      collegeName,
       current_location,
       profession,
       qualification,
@@ -73,6 +74,7 @@ exports.createEnquiry = async (req, res) => {
     const fieldValidations = [
       validateStringLength(name, 'Name', 100),
       validateStringLength(phone.replace(/\D/g, ''), 'Phone number', 20),
+      validateStringLength(collegeName, 'College name', 100),
       validateStringLength(current_location, 'Current location', 100),
       validateStringLength(profession, 'Profession', 100),
       validateStringLength(qualification, 'Qualification', 100),
@@ -173,6 +175,7 @@ exports.createEnquiry = async (req, res) => {
       name: name.trim(),
       email: email.toLowerCase().trim(),
       phone: phone.replace(/\D/g, ''),
+      collegeName: collegeName?.trim() || null,
       current_location: current_location?.trim() || null,
       profession: profession?.trim() || null,
       qualification: qualification?.trim() || null,
@@ -191,41 +194,6 @@ exports.createEnquiry = async (req, res) => {
       passwordChanged: false,
     });
 
-    // Calculate total fees from package and subjects
-    let totalFees = 0;
-
-    // Get package fees if packageId is provided
-    if (packageId) {
-      const pkg = await Package.findByPk(packageId, { attributes: ['fees'] });
-      if (pkg && pkg.fees) {
-        totalFees += pkg.fees;
-      }
-    }
-
-    // Get subject fees if subjectIds are provided
-    if (subjectIds && subjectIds.length > 0) {
-      const subjects = await Subject.findAll({
-        where: { id: subjectIds },
-        attributes: ['id', 'fees']
-      });
-      subjects.forEach(subject => {
-        if (subject.fees) {
-          totalFees += subject.fees;
-        }
-      });
-    }
-
-    // Create billing record with calculated total fees
-    if (totalFees > 0 || packageId || (subjectIds && subjectIds.length > 0)) {
-      await Billing.create({
-        enquiryId: enquiry.id,
-        packageCost: totalFees,
-        amountPaid: 0,
-        discount: 0,
-        balance: totalFees,
-      });
-    }
-
     res.status(201).json({
       success: true,
       message: 'Enquiry created successfully',
@@ -234,6 +202,7 @@ exports.createEnquiry = async (req, res) => {
         name: enquiry.name,
         email: enquiry.email,
         phone: enquiry.phone,
+        collegeName: enquiry.collegeName,
         current_location: enquiry.current_location,
         profession: enquiry.profession,
         qualification: enquiry.qualification,
@@ -248,7 +217,6 @@ exports.createEnquiry = async (req, res) => {
         consent: enquiry.consent,
         candidateStatus: enquiry.candidateStatus,
         createdAt: enquiry.createdAt,
-        totalFees: totalFees,
       }
     });
   } catch (error) {
@@ -360,6 +328,7 @@ exports.updateEnquiry = async (req, res) => {
       email,
       phone,
       password,
+      collegeName,
       current_location,
       profession,
       qualification,
@@ -374,8 +343,8 @@ exports.updateEnquiry = async (req, res) => {
       consent,
       candidateStatus,
       passwordChanged,
-      globalUser,
       global,
+      targetedFees
     } = req.body;
 
     const normalizedPhone = phone?.replace(/\D/g, '');
@@ -440,6 +409,7 @@ exports.updateEnquiry = async (req, res) => {
     // Validate text field lengths on update
     const lengthValidations = [
       validateStringLength(name, 'Name', 100),
+      validateStringLength(collegeName, 'College name', 100),
       validateStringLength(current_location, 'Current location', 100),
       validateStringLength(profession, 'Profession', 100),
       validateStringLength(qualification, 'Qualification', 100),
@@ -511,6 +481,7 @@ exports.updateEnquiry = async (req, res) => {
     if (email !== undefined) updateData.email = email.toLowerCase().trim();
     if (phone !== undefined) updateData.phone = phone.replace(/\D/g, '');
     if (password !== undefined) updateData.password = password;
+    if (collegeName !== undefined) updateData.collegeName = collegeName?.trim() || null;
     if (current_location !== undefined) updateData.current_location = current_location?.trim() || null;
     if (profession !== undefined) updateData.profession = profession?.trim() || null;
     if (qualification !== undefined) updateData.qualification = qualification?.trim() || null;
@@ -523,6 +494,7 @@ exports.updateEnquiry = async (req, res) => {
     if (startTime !== undefined) updateData.startTime = startTime?.trim() || null;
     if (referral !== undefined) updateData.referral = referral?.trim() || null;
     if (consent !== undefined) updateData.consent = consent;
+    if(targetedFees!== undefined) updateData.targetedFees= targetedFees ;
     if (candidateStatus !== undefined) updateData.candidateStatus = candidateStatus;
     if (passwordChanged !== undefined) updateData.passwordChanged = passwordChanged;
     if (global !== undefined) updateData.global = global;
@@ -538,6 +510,7 @@ exports.updateEnquiry = async (req, res) => {
         email: enquiry.email,
         phone: enquiry.phone,
         password: enquiry.password ? '***' : null,
+        collegeName: enquiry.collegeName,
         current_location: enquiry.current_location,
         profession: enquiry.profession,
         qualification: enquiry.qualification,
@@ -553,6 +526,7 @@ exports.updateEnquiry = async (req, res) => {
         candidateStatus: enquiry.candidateStatus,
         passwordChanged: enquiry.passwordChanged,
         global: enquiry.global,
+        targetedFees:enquiry.targetedFees,
         updatedAt: enquiry.updatedAt,
       }
     });
@@ -692,6 +666,7 @@ exports.enrollStudent = async (req, res) => {
         name: enquiry.name,
         email: enquiry.email,
         phone: enquiry.phone,
+        collegeName: enquiry.collegeName,
         current_location: enquiry.current_location,
         profession: enquiry.profession,
         qualification: enquiry.qualification,
