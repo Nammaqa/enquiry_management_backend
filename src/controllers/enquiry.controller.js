@@ -187,7 +187,7 @@ exports.createEnquiry = async (req, res) => {
       consent: consent || false,
       candidateStatus: candidateStatus || 'enquiry stage',
       password: hashedPassword,
-      globalUser: false,
+      global: false,
       passwordChanged: false,
     });
 
@@ -274,6 +274,7 @@ exports.createEnquiry = async (req, res) => {
 exports.getAllEnquiries = async (req, res) => {
   try {
     const enquiries = await Enquiry.findAll({
+      where: { global: true },
       attributes: { exclude: ['password'] },
       include: [
         {
@@ -358,6 +359,7 @@ exports.updateEnquiry = async (req, res) => {
       name,
       email,
       phone,
+      password,
       current_location,
       profession,
       qualification,
@@ -371,6 +373,9 @@ exports.updateEnquiry = async (req, res) => {
       referral,
       consent,
       candidateStatus,
+      passwordChanged,
+      globalUser,
+      global,
     } = req.body;
 
     const normalizedPhone = phone?.replace(/\D/g, '');
@@ -461,6 +466,16 @@ exports.updateEnquiry = async (req, res) => {
       return res.status(400).json({ message: 'consent must be a boolean value' });
     }
 
+    // Validate passwordChanged if provided
+    if (passwordChanged !== undefined && typeof passwordChanged !== 'boolean') {
+      return res.status(400).json({ message: 'passwordChanged must be a boolean value' });
+    }
+
+    // Validate global if provided
+    if (global !== undefined && typeof global !== 'boolean') {
+      return res.status(400).json({ message: 'global must be a boolean value' });
+    }
+
     // Validate package and subject selection
     // Determine the effective packageId and subjectIds after update
     const effectivePackageId = packageId !== undefined ? packageId : enquiry.packageId;
@@ -495,6 +510,7 @@ exports.updateEnquiry = async (req, res) => {
     if (name !== undefined) updateData.name = name.trim();
     if (email !== undefined) updateData.email = email.toLowerCase().trim();
     if (phone !== undefined) updateData.phone = phone.replace(/\D/g, '');
+    if (password !== undefined) updateData.password = password;
     if (current_location !== undefined) updateData.current_location = current_location?.trim() || null;
     if (profession !== undefined) updateData.profession = profession?.trim() || null;
     if (qualification !== undefined) updateData.qualification = qualification?.trim() || null;
@@ -508,6 +524,8 @@ exports.updateEnquiry = async (req, res) => {
     if (referral !== undefined) updateData.referral = referral?.trim() || null;
     if (consent !== undefined) updateData.consent = consent;
     if (candidateStatus !== undefined) updateData.candidateStatus = candidateStatus;
+    if (passwordChanged !== undefined) updateData.passwordChanged = passwordChanged;
+    if (global !== undefined) updateData.global = global;
 
     await enquiry.update(updateData);
 
@@ -519,6 +537,7 @@ exports.updateEnquiry = async (req, res) => {
         name: enquiry.name,
         email: enquiry.email,
         phone: enquiry.phone,
+        password: enquiry.password ? '***' : null,
         current_location: enquiry.current_location,
         profession: enquiry.profession,
         qualification: enquiry.qualification,
@@ -532,6 +551,8 @@ exports.updateEnquiry = async (req, res) => {
         referral: enquiry.referral,
         consent: enquiry.consent,
         candidateStatus: enquiry.candidateStatus,
+        passwordChanged: enquiry.passwordChanged,
+        global: enquiry.global,
         updatedAt: enquiry.updatedAt,
       }
     });
@@ -621,5 +642,79 @@ exports.changeEnquiryStatus = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * ENROLL Student (Mobile App)
+ * Called by student from mobile app to confirm enrollment
+ * Sets global to true (makes enquiry visible in admin UI) and updates status
+ */
+exports.enrollStudent = async (req, res) => {
+  try {
+    // Get enquiryId from JWT token (set by sharedAuth middleware)
+    const enquiryId = req.enquiry?.enquiryId || req.body?.enquiryId;
+
+    // Validate that we have an enquiryId
+    if (!enquiryId) {
+      return res.status(400).json({
+        message: 'Invalid request: Unable to identify student',
+      });
+    }
+
+    // Find the enquiry
+    const enquiry = await Enquiry.findByPk(enquiryId);
+    if (!enquiry) {
+      return res.status(404).json({
+        message: 'Student record not found',
+      });
+    }
+
+    // Check if already enrolled
+    if (enquiry.global === true) {
+      return res.status(400).json({
+        message: 'Student is already enrolled',
+      });
+    }
+
+    // Update global to true (now visible in admin UI) and set candidateStatus to 'class'
+    await enquiry.update({
+      global: false,
+      candidateStatus: 'enquiry stage',
+    });
+
+  
+    return res.status(200).json({
+      success: true,
+      message: 'Enrollment completed successfully. Your record is now visible to the admin team.',
+      data: {
+        id: enquiry.id,
+        name: enquiry.name,
+        email: enquiry.email,
+        phone: enquiry.phone,
+        current_location: enquiry.current_location,
+        profession: enquiry.profession,
+        qualification: enquiry.qualification,
+        experience: enquiry.experience,
+        packageId: enquiry.packageId,
+        batchId: enquiry.batchId,
+        subjectIds: enquiry.subjectIds,
+        trainingMode: enquiry.trainingMode,
+        trainingTime: enquiry.trainingTime,
+        startTime: enquiry.startTime,
+        referral: enquiry.referral,
+        consent: enquiry.consent,
+        candidateStatus: enquiry.candidateStatus,
+        global: enquiry.global,
+        enrolledAt: enquiry.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error('Enrollment error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error completing enrollment',
+      error: error.message,
+    });
   }
 };

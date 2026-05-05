@@ -25,10 +25,6 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.BOOLEAN,
                 defaultValue: false,
             },
-            globalUser: {
-                type: DataTypes.BOOLEAN,
-                defaultValue: true,
-            },
             global: {
                 type: DataTypes.BOOLEAN,
                 defaultValue: true,
