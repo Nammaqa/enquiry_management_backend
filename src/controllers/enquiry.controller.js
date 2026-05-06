@@ -242,6 +242,7 @@ exports.createEnquiry = async (req, res) => {
 exports.getAllEnquiries = async (req, res) => {
   try {
     const enquiries = await Enquiry.findAll({
+      where: { global: true },
       attributes: { exclude: ['password'] },
       include: [
         {
@@ -645,7 +646,7 @@ exports.enrollStudent = async (req, res) => {
 
     // Update global to true (now visible in admin UI) and set candidateStatus to 'class'
     await enquiry.update({
-      global: false,
+      global: true,
       candidateStatus: 'enquiry stage',
     });
 
