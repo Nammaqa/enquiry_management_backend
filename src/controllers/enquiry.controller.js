@@ -190,7 +190,7 @@ exports.createEnquiry = async (req, res) => {
       consent: consent || false,
       candidateStatus: candidateStatus || 'enquiry stage',
       password: hashedPassword,
-      global: false,
+      global: true,
       passwordChanged: false,
     });
 
@@ -242,7 +242,6 @@ exports.createEnquiry = async (req, res) => {
 exports.getAllEnquiries = async (req, res) => {
   try {
     const enquiries = await Enquiry.findAll({
-      where: { global: true },
       attributes: { exclude: ['password'] },
       include: [
         {
@@ -262,7 +261,7 @@ exports.getAllEnquiries = async (req, res) => {
 
       if (enquiryData.billing) {
         const { amountPaid, balance, packageCost } = enquiryData.billing;
-        
+
         if (balance === 0 || amountPaid >= packageCost) {
           paymentStatus = 'fully paid';
         } else if (amountPaid > 0 && balance > 0) {
@@ -494,7 +493,7 @@ exports.updateEnquiry = async (req, res) => {
     if (startTime !== undefined) updateData.startTime = startTime?.trim() || null;
     if (referral !== undefined) updateData.referral = referral?.trim() || null;
     if (consent !== undefined) updateData.consent = consent;
-    if(targetedFees!== undefined) updateData.targetedFees= targetedFees ;
+    if (targetedFees !== undefined) updateData.targetedFees = targetedFees;
     if (candidateStatus !== undefined) updateData.candidateStatus = candidateStatus;
     if (passwordChanged !== undefined) updateData.passwordChanged = passwordChanged;
     if (global !== undefined) updateData.global = global;
@@ -526,7 +525,7 @@ exports.updateEnquiry = async (req, res) => {
         candidateStatus: enquiry.candidateStatus,
         passwordChanged: enquiry.passwordChanged,
         global: enquiry.global,
-        targetedFees:enquiry.targetedFees,
+        targetedFees: enquiry.targetedFees,
         updatedAt: enquiry.updatedAt,
       }
     });
@@ -644,20 +643,13 @@ exports.enrollStudent = async (req, res) => {
       });
     }
 
-    // Check if already enrolled
-    if (enquiry.global === true) {
-      return res.status(400).json({
-        message: 'Student is already enrolled',
-      });
-    }
-
     // Update global to true (now visible in admin UI) and set candidateStatus to 'class'
     await enquiry.update({
       global: false,
       candidateStatus: 'enquiry stage',
     });
 
-  
+
     return res.status(200).json({
       success: true,
       message: 'Enrollment completed successfully. Your record is now visible to the admin team.',

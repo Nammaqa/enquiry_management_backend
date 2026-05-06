@@ -48,6 +48,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 0,
       },
+      transaction_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Transaction ID for the payment',
+      },
       packageType: {
         type: DataTypes.ENUM('package', 'individual'),
         allowNull: false,

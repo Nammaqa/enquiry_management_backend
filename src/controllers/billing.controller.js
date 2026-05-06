@@ -13,7 +13,8 @@ exports.createOrUpdateBilling = async (req, res) => {
       gst,
       packageType = 'package',
       subjectIds = [],
-      subjectPayments = [] // Array of {subjectId, amountPaid}
+      subjectPayments = [], // Array of {subjectId, amountPaid}
+      transaction_id
     } = req.body;
 
     // Validate required fields
@@ -59,6 +60,9 @@ exports.createOrUpdateBilling = async (req, res) => {
         billing.gstAmount = parseFloat(gstAmount.toFixed(2));
         billing.balance = newBalance;
         billing.packageType = 'package';
+        if (transaction_id !== undefined) {
+          billing.transaction_id = transaction_id;
+        }
         billing.subjectIds = null;
         billing.subjectWiseBreakdown = null;
         await billing.save();
@@ -77,6 +81,7 @@ exports.createOrUpdateBilling = async (req, res) => {
           gstAmount: parseFloat(gstAmount.toFixed(2)),
           balance: parseFloat(balance.toFixed(2)),
           packageType: 'package',
+          transaction_id,
         });
 
         return res.status(201).json({
@@ -140,6 +145,9 @@ exports.createOrUpdateBilling = async (req, res) => {
         billing.gstAmount = parseFloat(gstAmount.toFixed(2));
         billing.balance = newBalanceIndividual;
         billing.packageType = 'individual';
+        if (transaction_id !== undefined) {
+          billing.transaction_id = transaction_id;
+        }
         billing.subjectIds = subjectIds;
         billing.subjectWiseBreakdown = breakdown;
         await billing.save();
@@ -158,6 +166,7 @@ exports.createOrUpdateBilling = async (req, res) => {
           gstAmount: parseFloat(gstAmount.toFixed(2)),
           balance: parseFloat(balance.toFixed(2)),
           packageType: 'individual',
+          transaction_id,
           subjectIds: subjectIds,
           subjectWiseBreakdown: breakdown,
         });
@@ -430,6 +439,7 @@ exports.updateBilling = async (req, res) => {
       gst,
       gstAmount,
       balance,
+      transaction_id,
     } = req.body;
 
     const billing = await Billing.findByPk(id);
@@ -445,6 +455,7 @@ exports.updateBilling = async (req, res) => {
       gst: gst !== undefined ? gst : billing.gst,
       gstAmount: gstAmount !== undefined ? gstAmount : billing.gstAmount,
       balance: balance !== undefined ? balance : billing.balance,
+      transaction_id: transaction_id !== undefined ? transaction_id : billing.transaction_id,
     });
     
     console.log('updated amount paid',billing.amountPaid)
