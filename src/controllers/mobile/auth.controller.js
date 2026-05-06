@@ -50,7 +50,7 @@ exports.signup = async (req, res) => {
         phone: phone_number,
         password: hashedPassword,
         candidateStatus: 'enquiry stage',
-        globalUser: false,
+        global: false,
       });
 
       console.log('New enquiry created during signup:', student.id);
