@@ -12,7 +12,7 @@ router.get('/:id', auth, role(['ADMIN', 'ACCOUNTS', 'COUNSELLOR']), controller.g
 router.post('/', auth, role(['ADMIN', 'ACCOUNTS', 'COUNSELLOR']), controller.createOrUpdateBilling);
 
 /* UPDATE — ADMIN and ACCOUNTS */
-router.put('/:id', auth, role(['ADMIN', 'ACCOUNTS']), controller.updateBilling);
+router.put('/:id', auth, role(['ADMIN', 'ACCOUNTS','COUNSELLOR']), controller.updateBilling);
 
 /* DELETE — ADMIN ONLY */
 router.delete('/:id', auth, role(['ADMIN']), controller.deleteBilling);
