@@ -588,6 +588,7 @@ exports.changeEnquiryStatus = async (req, res) => {
       if (userrole !== 'COUNSELLOR') {
         return res.status(403).json({ message: 'Only COUNSELLOR can move from enquiry stage to demo' });
       }
+      enquiry.isSentBack = false;
     }
     // Rule 2: ACCOUNTS can move from demo to class
     else if (currentStatus === 'demo' && newStatus === 'class') {
@@ -600,6 +601,7 @@ exports.changeEnquiryStatus = async (req, res) => {
       if (userrole !== 'ACCOUNTS') {
         return res.status(403).json({ message: 'Only ACCOUNTS can move from demo to enquiry stage' });
       }
+      enquiry.isSentBack = true;
     }
     // Disallow any other transitions
     else {

@@ -99,6 +99,10 @@ module.exports = (sequelize, DataTypes) => {
                 allowNull: false,
                 defaultValue: 'enquiry stage',
             },
+            isSentBack: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: false,
+            },
             targetedFees: {
                 type: DataTypes.JSON,
                 allowNull: true,
