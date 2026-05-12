@@ -33,6 +33,7 @@ db.Certification = require('./certification')(sequelize, DataTypes);
 db.Project = require('./project')(sequelize, DataTypes);
 db.StudentPlacementApplied = require('./studentPlacementApplied')(sequelize, DataTypes);
 db.OTP = require('./otp')(sequelize, DataTypes);
+db.BillingPaymentHistory = require('./billingpaymenthistory')(sequelize, DataTypes);
 
 // ONE-TO-MANY: User has many OTPs
 db.User.hasMany(db.OTP, {
@@ -472,6 +473,17 @@ db.Enquiry.hasOne(db.Billing, {
 db.Billing.belongsTo(db.Enquiry, {
 	foreignKey: 'enquiryId',
 	as: 'enquiry',
+});
+
+// ONE-TO-MANY: Billing has many BillingPaymentHistory records
+db.Billing.hasMany(db.BillingPaymentHistory, {
+	foreignKey: 'billingId',
+	onDelete: 'CASCADE',
+	as: 'paymentHistory',
+});
+db.BillingPaymentHistory.belongsTo(db.Billing, {
+	foreignKey: 'billingId',
+	as: 'billing',
 });
 
 // JOB APPLICATIONS

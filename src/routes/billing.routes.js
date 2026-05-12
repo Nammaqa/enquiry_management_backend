@@ -6,6 +6,7 @@ const controller = require('../controllers/billing.controller');
 /* READ — ALL LOGGED-IN USERS */
 router.get('/', auth, role(['ADMIN', 'ACCOUNTS', 'COUNSELLOR']), controller.getAllBillings);
 router.get('/enquiry/:enquiryId', auth, role(['ADMIN', 'ACCOUNTS','COUNSELLOR']), controller.getBillingByEnquiryId);
+router.get('/:id/payment-history', auth, role(['ADMIN', 'ACCOUNTS', 'COUNSELLOR']), controller.getPaymentHistoryByBillingId);
 router.get('/:id', auth, role(['ADMIN', 'ACCOUNTS', 'COUNSELLOR']), controller.getBillingById);
 
 /* WRITE — ALL LOGGED-IN USERS (CREATE/UPDATE COMBINED) */

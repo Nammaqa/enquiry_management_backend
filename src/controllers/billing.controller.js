@@ -1,4 +1,4 @@
-const { Billing, Enquiry, Subject } = require('../models');
+const { Billing, Enquiry, Subject, BillingPaymentHistory } = require('../models');
 
 /**
  * CREATE or UPDATE Billing (COMBINED API - Package or Individual Subjects)
@@ -14,7 +14,8 @@ exports.createOrUpdateBilling = async (req, res) => {
       packageType = 'package',
       subjectIds = [],
       subjectPayments = [], // Array of {subjectId, amountPaid}
-      transaction_id
+      transaction_id,
+      paymentMode,
     } = req.body;
 
     // Validate required fields
@@ -67,6 +68,16 @@ exports.createOrUpdateBilling = async (req, res) => {
         billing.subjectWiseBreakdown = null;
         await billing.save();
 
+        // Log this payment in the history table
+        if (parseFloat(amountPaid) > 0) {
+          await BillingPaymentHistory.create({
+            billingId: billing.id,
+            amountPaid: parseFloat(amountPaid),
+            paymentMode: paymentMode || null,
+            transaction_id: transaction_id || null,
+          });
+        }
+
         return res.status(200).json({
           message: 'Billing updated successfully',
           billing,
@@ -83,6 +94,16 @@ exports.createOrUpdateBilling = async (req, res) => {
           packageType: 'package',
           transaction_id,
         });
+
+        // Log this payment in the history table
+        if (parseFloat(amountPaid) > 0) {
+          await BillingPaymentHistory.create({
+            billingId: billing.id,
+            amountPaid: parseFloat(amountPaid),
+            paymentMode: paymentMode || null,
+            transaction_id: transaction_id || null,
+          });
+        }
 
         return res.status(201).json({
           message: 'Billing created successfully',
@@ -210,6 +231,11 @@ exports.getBillingByEnquiryId = async (req, res) => {
           as: 'enquiry',
           attributes: ['id', 'name', 'email', 'phone'],
         },
+        {
+          model: BillingPaymentHistory,
+          as: 'paymentHistory',
+          order: [['createdAt', 'ASC']],
+        },
       ],
     });
 
@@ -238,6 +264,11 @@ exports.getAllBillings = async (req, res) => {
           as: 'enquiry',
           attributes: ['id', 'name', 'email', 'phone'],
         },
+        {
+          model: BillingPaymentHistory,
+          as: 'paymentHistory',
+          order: [['createdAt', 'ASC']],
+        },
       ],
       order: [['createdAt', 'DESC']],
     });
@@ -260,6 +291,11 @@ exports.getBillingById = async (req, res) => {
           model: require('../models').Enquiry,
           as: 'enquiry',
           attributes: ['id', 'name', 'email', 'phone'],
+        },
+        {
+          model: BillingPaymentHistory,
+          as: 'paymentHistory',
+          order: [['createdAt', 'ASC']],
         },
       ],
     });
@@ -440,13 +476,18 @@ exports.updateBilling = async (req, res) => {
       gstAmount,
       balance,
       transaction_id,
+      paymentMode,
     } = req.body;
 
     const billing = await Billing.findByPk(id);
     if (!billing) {
       return res.status(404).json({ message: 'Billing not found' });
     }
-    console.log('beofre paid ',amountPaid)
+
+    // Capture previous amountPaid BEFORE the update so we can compute the delta
+    const previousAmountPaid = parseFloat(billing.amountPaid) || 0;
+
+    console.log('before paid ', amountPaid);
     // Direct update — no calculations, no accumulation, just set what comes in
     await billing.update({
       packageCost: packageCost !== undefined ? packageCost : billing.packageCost,
@@ -457,8 +498,26 @@ exports.updateBilling = async (req, res) => {
       balance: balance !== undefined ? balance : billing.balance,
       transaction_id: transaction_id !== undefined ? transaction_id : billing.transaction_id,
     });
-    
-    console.log('updated amount paid',billing.amountPaid)
+
+    console.log('updated amount paid', billing.amountPaid);
+
+    // Record this payment in the history table
+    // The delta = how much was actually paid in THIS transaction
+    if (amountPaid !== undefined) {
+      const newPaymentAmount = parseFloat(
+        (parseFloat(amountPaid) - previousAmountPaid).toFixed(2)
+      );
+
+      if (newPaymentAmount > 0) {
+        await BillingPaymentHistory.create({
+          billingId: billing.id,
+          amountPaid: newPaymentAmount,
+          paymentMode: paymentMode || null,
+          transaction_id: transaction_id || null,
+        });
+      }
+    }
+
     return res.status(200).json({
       message: 'Billing updated successfully 2',
       billing: await Billing.findByPk(id),
@@ -490,5 +549,33 @@ exports.deleteBilling = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * GET Payment History by Billing ID
+ * GET /api/billing/:id/payment-history
+ */
+exports.getPaymentHistoryByBillingId = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const billing = await Billing.findByPk(id);
+    if (!billing) {
+      return res.status(404).json({ message: 'Billing not found' });
+    }
+
+    const history = await BillingPaymentHistory.findAll({
+      where: { billingId: id },
+      order: [['createdAt', 'DESC']],
+    });
+
+    return res.status(200).json({
+      billingId: parseInt(id),
+      paymentHistory: history,
+    });
+  } catch (error) {
+    console.error('Get Payment History Error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
