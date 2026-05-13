@@ -552,4 +552,61 @@ exports.deleteBilling = async (req, res) => {
   }
 };
 
+/**
+ * GET Payment History by Billing ID
+ * GET /api/billing/:id/payment-history
+ */
+exports.getPaymentHistoryByBillingId = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const billing = await Billing.findByPk(id);
+    if (!billing) {
+      return res.status(404).json({ message: 'Billing not found' });
+    }
+
+    const history = await BillingPaymentHistory.findAll({
+      where: { billingId: id },
+      order: [['createdAt', 'ASC']],
+    });
+
+    // Calculate balance at time and cumulative paid for each payment
+    const totalCost = parseFloat(billing.packageCost) - parseFloat(billing.discount || 0);
+    let remainingBalance = totalCost;
+    let cumulativePaid = 0;
+
+    const enhancedHistory = history.map(payment => {
+      const paymentAmount = parseFloat(payment.amountPaid);
+
+      const balanceAtTime = parseFloat(remainingBalance.toFixed(2));
+      remainingBalance = parseFloat((remainingBalance - paymentAmount).toFixed(2));
+
+      cumulativePaid = parseFloat((cumulativePaid + paymentAmount).toFixed(2));
+
+      return {
+        id: payment.id,
+        billingId: payment.billingId,
+        amountPaid: paymentAmount,
+        paymentMode: payment.paymentMode,
+        transaction_id: payment.transaction_id,
+        balanceAtTime,
+        balanceAfterPayment: remainingBalance,
+        totalPaidSoFar: cumulativePaid,
+        createdAt: payment.createdAt,
+        updatedAt: payment.updatedAt,
+      };
+    });
+
+    return res.status(200).json({
+      billingId: parseInt(id),
+      totalCost: totalCost,
+      currentBalance: parseFloat(billing.balance),
+      paymentHistory: enhancedHistory,
+    });
+  } catch (error) {
+    console.error('Get Payment History Error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 
