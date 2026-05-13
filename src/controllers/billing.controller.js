@@ -552,30 +552,4 @@ exports.deleteBilling = async (req, res) => {
   }
 };
 
-/**
- * GET Payment History by Billing ID
- * GET /api/billing/:id/payment-history
- */
-exports.getPaymentHistoryByBillingId = async (req, res) => {
-  try {
-    const { id } = req.params;
 
-    const billing = await Billing.findByPk(id);
-    if (!billing) {
-      return res.status(404).json({ message: 'Billing not found' });
-    }
-
-    const history = await BillingPaymentHistory.findAll({
-      where: { billingId: id },
-      order: [['createdAt', 'DESC']],
-    });
-
-    return res.status(200).json({
-      billingId: parseInt(id),
-      paymentHistory: history,
-    });
-  } catch (error) {
-    console.error('Get Payment History Error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
