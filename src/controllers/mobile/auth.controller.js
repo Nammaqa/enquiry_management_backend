@@ -29,19 +29,19 @@ exports.signup = async (req, res) => {
       });
     }
 
-    // Check if email or phone already exist
-    const existingEmail = await Enquiry.findOne({ where: { email } });
-    const existingPhone = await Enquiry.findOne({ where: { phone: phone_number } });
+    // Check if phone already exists (primary identifier for mobile signup)
+    let student = await Enquiry.findOne({ where: { phone: phone_number } });
 
-    let student;
+    if (!student) {
+      // Also check if email exists to prevent duplicate accounts
+      const existingEmail = await Enquiry.findOne({ where: { email } });
+      if (existingEmail) {
+        return res.status(400).json({
+          message: 'Email already registered with a different phone number',
+        });
+      }
 
-    // If enquiry already exists, reuse it instead of throwing error
-    if (existingEmail || existingPhone) {
-      student = existingEmail || existingPhone;
-      console.log('Existing enquiry found, reusing for signup:', student.id);
-    } else {
       // Create new student account in Enquiry table
-      // Hash password
       const hashedPassword = await hashPassword(password);
 
       student = await Enquiry.create({
@@ -54,6 +54,8 @@ exports.signup = async (req, res) => {
       });
 
       console.log('New enquiry created during signup:', student.id);
+    } else {
+      console.log('Existing enquiry found, reusing for signup:', student.id);
     }
 
     // Generate OTP
