@@ -529,6 +529,42 @@ exports.updateBilling = async (req, res) => {
   }
 };
 /**
+ * UPDATE Billing by ID
+ */
+exports.updateBilling = async (req, res) => {
+  try {
+    const billing = await Billing.findByPk(req.params.id);
+
+    if (!billing) {
+      return res.status(404).json({ message: 'Billing not found' });
+    }
+
+    const { packageCost, amountPaid, discount } = req.body;
+
+    if (packageCost === undefined && amountPaid === undefined && discount === undefined) {
+      return res.status(400).json({
+        message: 'At least one field (packageCost, amountPaid, discount) is required to update billing',
+      });
+    }
+
+    billing.packageCost = packageCost !== undefined ? packageCost : billing.packageCost;
+    billing.amountPaid = amountPaid !== undefined ? amountPaid : billing.amountPaid;
+    billing.discount = discount !== undefined ? discount : billing.discount;
+    billing.balance = billing.packageCost - billing.discount - billing.amountPaid;
+
+    await billing.save();
+
+    res.json({
+      message: 'Billing updated successfully',
+      billing,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
  * DELETE Billing (ADMIN ONLY)
  */
 exports.deleteBilling = async (req, res) => {
