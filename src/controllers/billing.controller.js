@@ -11,12 +11,18 @@ exports.createOrUpdateBilling = async (req, res) => {
       amountPaid,
       discount,
       gst,
-      packageType = 'package',
       subjectIds = [],
       subjectPayments = [], // Array of {subjectId, amountPaid}
       transaction_id,
       paymentMode,
     } = req.body;
+
+    let packageType = req.body.packageType;
+    if (typeof packageType !== 'string' || !packageType.trim()) {
+      packageType = 'package';
+    } else {
+      packageType = packageType.trim().toLowerCase();
+    }
 
     // Validate required fields
     if (!enquiryId) {
@@ -33,28 +39,33 @@ exports.createOrUpdateBilling = async (req, res) => {
 
     // CASE 1: Package-based billing
     if (packageType === 'package') {
-      if (packageCost === undefined) {
-        return res.status(400).json({ message: 'Package cost is required' });
-      }
-
-      if (amountPaid === undefined) {
-        return res.status(400).json({ message: 'Amount paid is required' });
-      }
-
       const finalDiscount = discount || 0;
       const gstPercentage = gst || 0;
+      const currentPackageCost = billing ? parseFloat(billing.packageCost) : undefined;
+      const resolvedPackageCost = packageCost !== undefined
+        ? parseFloat(packageCost)
+        : currentPackageCost !== undefined
+          ? currentPackageCost
+          : amountPaid !== undefined
+            ? parseFloat(amountPaid)
+            : undefined;
 
-      const costAfterDiscount = packageCost - finalDiscount;
+      if (resolvedPackageCost === undefined) {
+        return res.status(400).json({ message: 'Package cost is required for a new billing record' });
+      }
+
+      const finalAmountPaid = amountPaid !== undefined ? parseFloat(amountPaid) : 0;
+      const costAfterDiscount = resolvedPackageCost - finalDiscount;
       const gstAmount = costAfterDiscount * (gstPercentage / 100);
-      const totalCost = costAfterDiscount;  // Package cost already includes GST
-      const balance = totalCost - amountPaid;
+      const totalCost = costAfterDiscount;
+      const balance = parseFloat((totalCost - finalAmountPaid).toFixed(2));
 
       if (billing) {
         // ACCUMULATE the new payment with existing amount paid
-        const newTotalAmountPaid = parseFloat((parseFloat(billing.amountPaid) + parseFloat(amountPaid)).toFixed(2));
+        const newTotalAmountPaid = parseFloat((parseFloat(billing.amountPaid) + finalAmountPaid).toFixed(2));
         const newBalance = parseFloat((totalCost - newTotalAmountPaid).toFixed(2));
 
-        billing.packageCost = packageCost;
+        billing.packageCost = resolvedPackageCost;
         billing.amountPaid = newTotalAmountPaid;
         billing.discount = finalDiscount;
         billing.gst = gstPercentage;
@@ -68,11 +79,10 @@ exports.createOrUpdateBilling = async (req, res) => {
         billing.subjectWiseBreakdown = null;
         await billing.save();
 
-        // Log this payment in the history table
-        if (parseFloat(amountPaid) > 0) {
+        if (finalAmountPaid > 0) {
           await BillingPaymentHistory.create({
             billingId: billing.id,
-            amountPaid: parseFloat(amountPaid),
+            amountPaid: finalAmountPaid,
             paymentMode: paymentMode || null,
             transaction_id: transaction_id || null,
           });
@@ -82,34 +92,33 @@ exports.createOrUpdateBilling = async (req, res) => {
           message: 'Billing updated successfully',
           billing,
         });
-      } else {
-        billing = await Billing.create({
-          enquiryId,
-          packageCost,
-          amountPaid,
-          discount: finalDiscount,
-          gst: gstPercentage,
-          gstAmount: parseFloat(gstAmount.toFixed(2)),
-          balance: parseFloat(balance.toFixed(2)),
-          packageType: 'package',
-          transaction_id,
-        });
+      }
 
-        // Log this payment in the history table
-        if (parseFloat(amountPaid) > 0) {
-          await BillingPaymentHistory.create({
-            billingId: billing.id,
-            amountPaid: parseFloat(amountPaid),
-            paymentMode: paymentMode || null,
-            transaction_id: transaction_id || null,
-          });
-        }
+      billing = await Billing.create({
+        enquiryId,
+        packageCost: resolvedPackageCost,
+        amountPaid: finalAmountPaid,
+        discount: finalDiscount,
+        gst: gstPercentage,
+        gstAmount: parseFloat(gstAmount.toFixed(2)),
+        balance: parseFloat(balance.toFixed(2)),
+        packageType: 'package',
+        transaction_id,
+      });
 
-        return res.status(201).json({
-          message: 'Billing created successfully',
-          billing,
+      if (finalAmountPaid > 0) {
+        await BillingPaymentHistory.create({
+          billingId: billing.id,
+          amountPaid: finalAmountPaid,
+          paymentMode: paymentMode || null,
+          transaction_id: transaction_id || null,
         });
       }
+
+      return res.status(201).json({
+        message: 'Billing created successfully',
+        billing,
+      });
     }
 
     // CASE 2: Individual subjects billing
@@ -240,7 +249,26 @@ exports.getBillingByEnquiryId = async (req, res) => {
     });
 
     if (!billing) {
-      return res.status(404).json({
+      return res.status(200).json({
+        id: null,
+        enquiryId,
+        packageCost: 0,
+        amountPaid: 0,
+        discount: 0,
+        gst: 0,
+        gstAmount: 0,
+        balance: 0,
+        packageType: 'package',
+        transaction_id: null,
+        subjectIds: [],
+        subjectWiseBreakdown: [],
+        enquiry: {
+          id: enquiry.id,
+          name: enquiry.name,
+          email: enquiry.email,
+          phone: enquiry.phone,
+        },
+        paymentHistory: [],
         message: 'Billing record not found for this enquiry',
       });
     }
@@ -467,72 +495,6 @@ exports.getBillingById = async (req, res) => {
 // };
 exports.updateBilling = async (req, res) => {
   try {
-    const { id } = req.params;
-    const {
-      packageCost,
-      amountPaid,
-      discount,
-      gst,
-      gstAmount,
-      balance,
-      transaction_id,
-      paymentMode,
-    } = req.body;
-
-    const billing = await Billing.findByPk(id);
-    if (!billing) {
-      return res.status(404).json({ message: 'Billing not found' });
-    }
-
-    // Capture previous amountPaid BEFORE the update so we can compute the delta
-    const previousAmountPaid = parseFloat(billing.amountPaid) || 0;
-
-    console.log('before paid ', amountPaid);
-    // Direct update — no calculations, no accumulation, just set what comes in
-    await billing.update({
-      packageCost: packageCost !== undefined ? packageCost : billing.packageCost,
-      amountPaid: amountPaid !== undefined ? amountPaid : billing.amountPaid,
-      discount: discount !== undefined ? discount : billing.discount,
-      gst: gst !== undefined ? gst : billing.gst,
-      gstAmount: gstAmount !== undefined ? gstAmount : billing.gstAmount,
-      balance: balance !== undefined ? balance : billing.balance,
-      transaction_id: transaction_id !== undefined ? transaction_id : billing.transaction_id,
-    });
-
-    console.log('updated amount paid', billing.amountPaid);
-
-    // Record this payment in the history table
-    // The delta = how much was actually paid in THIS transaction
-    if (amountPaid !== undefined) {
-      const newPaymentAmount = parseFloat(
-        (parseFloat(amountPaid) - previousAmountPaid).toFixed(2)
-      );
-
-      if (newPaymentAmount > 0) {
-        await BillingPaymentHistory.create({
-          billingId: billing.id,
-          amountPaid: newPaymentAmount,
-          paymentMode: paymentMode || null,
-          transaction_id: transaction_id || null,
-        });
-      }
-    }
-
-    return res.status(200).json({
-      message: 'Billing updated successfully 2',
-      billing: await Billing.findByPk(id),
-    });
-
-  } catch (error) {
-    console.error('Billing Update Error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
-/**
- * UPDATE Billing by ID
- */
-exports.updateBilling = async (req, res) => {
-  try {
     const billing = await Billing.findByPk(req.params.id);
 
     if (!billing) {
@@ -641,6 +603,69 @@ exports.getPaymentHistoryByBillingId = async (req, res) => {
     });
   } catch (error) {
     console.error('Get Payment History Error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+/**
+ * SAVE Payment History Record
+ * POST /api/billings/:id/payment-history
+ */
+exports.savePaymentHistoryByBillingId = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      amountPaid,
+      paymentMode,
+      transaction_id,
+    } = req.body;
+
+    // Validate billing exists
+    const billing = await Billing.findByPk(id);
+    if (!billing) {
+      return res.status(404).json({ message: 'Billing not found' });
+    }
+
+    // Validate amountPaid is provided and is a valid number
+    if (amountPaid === undefined || amountPaid === null) {
+      return res.status(400).json({ message: 'amountPaid is required' });
+    }
+
+    const paymentAmount = parseFloat(amountPaid);
+    if (isNaN(paymentAmount) || paymentAmount <= 0) {
+      return res.status(400).json({ message: 'amountPaid must be a positive number' });
+    }
+
+    // Create payment history record
+    const paymentHistory = await BillingPaymentHistory.create({
+      billingId: id,
+      amountPaid: paymentAmount,
+      paymentMode: paymentMode || null,
+      transaction_id: transaction_id || null,
+    });
+
+    // Update billing balance
+    const newAmountPaid = parseFloat((parseFloat(billing.amountPaid) + paymentAmount).toFixed(2));
+    const newBalance = parseFloat((parseFloat(billing.packageCost) - parseFloat(billing.discount || 0) - newAmountPaid).toFixed(2));
+
+    await billing.update({
+      amountPaid: newAmountPaid,
+      balance: newBalance,
+    });
+
+    return res.status(201).json({
+      message: 'Payment recorded successfully',
+      paymentHistory,
+      billing: {
+        id: billing.id,
+        enquiryId: billing.enquiryId,
+        packageCost: billing.packageCost,
+        amountPaid: newAmountPaid,
+        balance: newBalance,
+      },
+    });
+  } catch (error) {
+    console.error('Save Payment History Error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
