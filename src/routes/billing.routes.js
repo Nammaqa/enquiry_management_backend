@@ -16,3 +16,4 @@ router.put('/:id', auth, role(['ADMIN', 'ACCOUNTS', 'COUNSELLOR']), controller.u
 router.delete('/:id', auth, role(['ADMIN']), controller.deleteBilling);
 
 module.exports = router;
+
