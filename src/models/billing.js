@@ -31,10 +31,43 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         defaultValue: 0,
       },
+      gst: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true, 
+        defaultValue: 0,
+        comment: 'GST percentage or amount',
+      },
+      gstAmount: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0,
+        comment: 'Calculated GST amount',
+      },
       balance: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: false,
         defaultValue: 0,
+      },
+      transaction_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Transaction ID for the payment',
+      },
+      packageType: {
+        type: DataTypes.ENUM('package', 'individual'),
+        allowNull: false,
+        defaultValue: 'package',
+        comment: 'Whether billing is for predefined package or individual subjects',
+      },
+      subjectIds: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        comment: 'Array of subject IDs for individual subject selection',
+      },
+      subjectWiseBreakdown: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        comment: 'Breakdown of costs per subject: [{subjectId, subjectName, fee, paid, balance}]',
       },
     },
     {

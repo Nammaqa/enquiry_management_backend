@@ -79,7 +79,7 @@ exports.enquiryStudentSignup = async (req, res) => {
       phone: phoneDigits,
       password: hashedPassword,
       candidateStatus: 'enquiry stage',
-      globalUser: true,
+      global: true,
       passwordChanged: true,
     });
 

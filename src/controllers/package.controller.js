@@ -46,23 +46,66 @@ exports.createPackage = async (req, res) => {
       });
     }
 
-    // Parse form data using formidable
-    const form = new Formidable({
-      multiples: false,
-      maxFileSize: 10 * 1024 * 1024, // 10MB limit
-      keepExtensions: true
-    });
+    let name, code, description, type, duration, startDate, packageType, overview, syllabus, prerequisites, subjectIds, domain, mode, imageUrl = null;
 
-    const [fields, files] = await form.parse(req);
+    // Check if request has files (multipart/form-data) or is JSON
+    if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
+      // Handle multipart form data with formidable
+      const form = new Formidable({
+        multiples: false,
+        maxFileSize: 10 * 1024 * 1024, // 10MB limit
+        keepExtensions: true
+      });
 
-    // Extract field values
-    const name = getFieldValue(fields.name);
-    const code = getFieldValue(fields.code);
-    const startDate = getFieldValue(fields.startDate);
-    const overview = getFieldValue(fields.overview);
-    const syllabus = getFieldValue(fields.syllabus);
-    const prerequisites = getFieldValue(fields.prerequisites);
-    const subjectIds = parseSubjectIds(fields.subjectIds);
+      const [fields, files] = await form.parse(req);
+
+      // Extract field values
+      name = getFieldValue(fields.name);
+      code = getFieldValue(fields.code);
+      description = getFieldValue(fields.description);
+      type = getFieldValue(fields.type);
+      duration = getFieldValue(fields.duration);
+      startDate = getFieldValue(fields.startDate);
+      packageType = getFieldValue(fields.packageType);
+      overview = getFieldValue(fields.overview);
+      syllabus = getFieldValue(fields.syllabus);
+      prerequisites = getFieldValue(fields.prerequisites);
+      domain = getFieldValue(fields.domain);
+      mode = getFieldValue(fields.mode);
+      subjectIds = parseSubjectIds(fields.subjectIds);
+
+      // Handle image upload if provided
+      if (files.image && files.image[0]) {
+      const imageFile = files.image[0];
+
+      const fileBuffer = await fs.promises.readFile(imageFile.filepath);
+
+      const uploadResult = await uploadImage(
+        fileBuffer,
+        `package-${Date.now()}`
+      );
+
+      imageUrl = uploadResult.secure_url;
+
+      await fs.promises.unlink(imageFile.filepath).catch(() => {});
+    }
+    } else {
+      // Handle JSON request
+      const { name: reqName, code: reqCode, description: reqDescription, type: reqType, duration: reqDuration, startDate: reqStartDate, packageType: reqPackageType, overview: reqOverview, syllabus: reqSyllabus, prerequisites: reqPrerequisites, domain: reqDomain, mode: reqMode, subjectIds: reqSubjectIds } = req.body;
+      name = reqName;
+      code = reqCode;
+      description = reqDescription;
+      type = reqType;
+      duration = reqDuration;
+      startDate = reqStartDate;
+      packageType = reqPackageType;
+      overview = reqOverview;
+      syllabus = reqSyllabus;
+      prerequisites = reqPrerequisites;
+      domain = reqDomain;
+      mode = reqMode;
+      subjectIds = reqSubjectIds;
+    }
 
     if (!name || !code) {
       return res.status(400).json({
@@ -70,15 +113,35 @@ exports.createPackage = async (req, res) => {
       });
     }
 
-    let imageUrl = null;
+    // Validate type field
+    if (type && !['starter', 'advance', 'expert'].includes(type)) {
+      return res.status(400).json({
+        message: 'type must be one of: starter, advance, expert',
+      });
+    }
 
-    // Upload image if provided
-    if (files.image && files.image.length > 0) {
-      const imageFile = files.image[0];
-      const fileBuffer = await fs.promises.readFile(imageFile.filepath);
-      const uploadResult = await uploadImage(fileBuffer, `package-${Date.now()}`);
-      imageUrl = uploadResult.secure_url;
-      await fs.promises.unlink(imageFile.filepath).catch(() => {});
+    // Validate duration is a number
+    if (duration !== null && duration !== undefined && isNaN(duration)) {
+      return res.status(400).json({
+        message: 'duration must be a valid number',
+      });
+    }
+
+    // Validate packageType - use default 'standard' if not provided
+    const finalPackageType = packageType || 'standard';
+    if (!['standard', 'others'].includes(finalPackageType)) {
+      return res.status(400).json({
+        message: 'packageType must be either "standard" or "others"',
+      });
+    }
+
+    // If packageType is 'others', subjectIds must be provided and not empty
+    if (finalPackageType === 'others') {
+      if (!subjectIds || !Array.isArray(subjectIds) || subjectIds.length === 0) {
+        return res.status(400).json({
+          message: 'When packageType is "others", subjectIds must be provided as a non-empty array',
+        });
+      }
     }
 
     // Validate subjects if provided
@@ -97,7 +160,13 @@ exports.createPackage = async (req, res) => {
     const pkg = await Package.create({
       name,
       code,
+      description,
+      type,
+      duration: duration ? parseInt(duration) : null,
       startDate: startDate || null,
+      packageType: finalPackageType,
+      domain,
+      mode,
       image: imageUrl,
       overview: safeJsonParse(overview),
       syllabus: safeJsonParse(syllabus),
@@ -134,6 +203,7 @@ exports.createPackage = async (req, res) => {
 exports.getAllPackages = async (req, res) => {
   try {
     const packages = await Package.findAll({
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'domain', 'mode', 'createdAt', 'updatedAt'],
       include: {
         model: Subject,
         as: 'subjects',
@@ -154,6 +224,7 @@ exports.getAllPackages = async (req, res) => {
 exports.getPackageById = async (req, res) => {
   try {
     const pkg = await Package.findByPk(req.params.id, {
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'domain', 'mode', 'createdAt', 'updatedAt'],
       include: {
         model: Subject,
         as: 'subjects',
@@ -220,11 +291,49 @@ exports.updatePackage = async (req, res) => {
       // Extract field values
       const name = getFieldValue(fields.name);
       const code = getFieldValue(fields.code);
+      const description = getFieldValue(fields.description);
+      const type = getFieldValue(fields.type);
+      const duration = getFieldValue(fields.duration);
       const startDate = getFieldValue(fields.startDate);
+      const packageType = getFieldValue(fields.packageType);
       const overview = getFieldValue(fields.overview);
       const syllabus = getFieldValue(fields.syllabus);
       const prerequisites = getFieldValue(fields.prerequisites);
+      const domain = getFieldValue(fields.domain);
+      const mode = getFieldValue(fields.mode);
       subjectIds = parseSubjectIds(fields.subjectIds);
+
+      // Validate packageType if provided
+      if (packageType && !['standard', 'others'].includes(packageType)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'packageType must be either "standard" or "others"',
+        });
+      }
+
+      // Validate type field
+      if (type && !['starter', 'advance', 'expert'].includes(type)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'type must be one of: starter, advance, expert',
+        });
+      }
+
+      // Validate duration is a number
+      if (duration !== null && duration !== undefined && isNaN(duration)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'duration must be a valid number',
+        });
+      }
+
+      // If packageType is being changed to 'others', ensure subjectIds are provided
+      if (packageType === 'others' && (!subjectIds || subjectIds.length === 0)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'When packageType is "others", subjectIds must be provided as a non-empty array',
+        });
+      }
 
       // Handle image update
       if (files.image && files.image.length > 0) {
@@ -248,24 +357,71 @@ exports.updatePackage = async (req, res) => {
       // Build update data
       if (name !== undefined) updateData.name = name;
       if (code !== undefined) updateData.code = code;
+      if (description !== undefined) updateData.description = description;
+      if (type !== undefined) updateData.type = type;
+      if (duration !== undefined) updateData.duration = duration ? parseInt(duration) : null;
       if (startDate !== undefined) updateData.startDate = startDate;
+      if (packageType !== undefined) updateData.packageType = packageType;
       if (overview !== undefined) updateData.overview = safeJsonParse(overview);
       if (syllabus !== undefined) updateData.syllabus = safeJsonParse(syllabus);
       if (prerequisites !== undefined) updateData.prerequisites = safeJsonParse(prerequisites);
+      if (domain !== undefined) updateData.domain = domain;
+      if (mode !== undefined) updateData.mode = mode;
       updateData.image = imageUrl;
 
     } else {
       // Handle JSON request body
-      const { name, code, startDate, overview, syllabus, prerequisites, subjectIds: subjIds } = req.body;
+      const { name, code, description, type, duration, startDate, overview, syllabus, prerequisites, domain, mode, subjectIds: subjIds } = req.body;
       subjectIds = subjIds;
+
+      // Validate packageType if provided (need to get from req.body)
+      const packageType = req.body.packageType;
+
+      // Validate packageType if provided
+      if (packageType && !['standard', 'others'].includes(packageType)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'packageType must be either "standard" or "others"',
+        });
+      }
+
+      // Validate type field
+      if (type && !['starter', 'advance', 'expert'].includes(type)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'type must be one of: starter, advance, expert',
+        });
+      }
+
+      // Validate duration is a number
+      if (duration !== null && duration !== undefined && isNaN(duration)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'duration must be a valid number',
+        });
+      }
+
+      // If packageType is being changed to 'others', ensure subjectIds are provided
+      if (packageType === 'others' && (!subjectIds || subjectIds.length === 0)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          message: 'When packageType is "others", subjectIds must be provided as a non-empty array',
+        });
+      }
 
       // Build update data
       if (name !== undefined) updateData.name = name;
       if (code !== undefined) updateData.code = code;
+      if (description !== undefined) updateData.description = description;
+      if (type !== undefined) updateData.type = type;
+      if (duration !== undefined) updateData.duration = duration ? parseInt(duration) : null;
       if (startDate !== undefined) updateData.startDate = startDate;
+      if (packageType !== undefined) updateData.packageType = packageType;
       if (overview !== undefined) updateData.overview = overview;
       if (syllabus !== undefined) updateData.syllabus = syllabus;
       if (prerequisites !== undefined) updateData.prerequisites = prerequisites;
+      if (domain !== undefined) updateData.domain = domain;
+      if (mode !== undefined) updateData.mode = mode;
       updateData.image = imageUrl;
     }
 
@@ -397,3 +553,35 @@ exports.deletePackage = async (req, res) => {
     });
   }
 };
+/**
+ * GET package details by ID (ALL ROLES)
+ */
+exports.getPackagePriceByid = async (req, res) => {
+  try {
+    const pkg = await Package.findByPk(req.params.id, {
+      attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'packageType']
+    });
+
+    if (!pkg) {
+      return res.status(404).json({
+        message: 'Package not found',
+      });
+    }
+
+    return res.status(200).json({
+      id: pkg.id,
+      name: pkg.name,
+      code: pkg.code,
+      description: pkg.description,
+      type: pkg.type,
+      duration: pkg.duration,
+      packageType: pkg.packageType,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
+  }
+}

@@ -15,26 +15,18 @@ module.exports = {
       defaultValue: false,
     });
 
-    // 3. Add globalUser column
-    await queryInterface.addColumn('enquiries', 'globalUser', {
-      type: Sequelize.BOOLEAN,
-      defaultValue: true,
-    });
-
-    // 4. Generate hash for default password "password"
+    // 3. Generate hash for default password "password"
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash("password", salt);
 
-    // 5. Update all existing records with the hashed password, passwordChanged=false, and globalUser=true
-    // Note: globalUser default already handles new defaults if nullable false, but good to explicit for existing records just in case
+    // 4. Update all existing records with the hashed password and passwordChanged=false
     await queryInterface.sequelize.query(
-      `UPDATE enquiries SET password = '${hashedPassword}', "passwordChanged" = false, "globalUser" = true`
+      `UPDATE enquiries SET password = '${hashedPassword}', "passwordChanged" = false`
     );
   },
 
   down: async (queryInterface, Sequelize) => {
     await queryInterface.removeColumn('enquiries', 'password');
     await queryInterface.removeColumn('enquiries', 'passwordChanged');
-    await queryInterface.removeColumn('enquiries', 'globalUser');
   }
 };

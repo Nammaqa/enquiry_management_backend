@@ -1,4 +1,4 @@
-const { Enquiry } = require('../models');
+const { Enquiry, Package, Subject, Billing } = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 
@@ -32,6 +32,7 @@ exports.createEnquiry = async (req, res) => {
       phone,
 
       // Personal details
+      collegeName,
       current_location,
       profession,
       qualification,
@@ -73,6 +74,7 @@ exports.createEnquiry = async (req, res) => {
     const fieldValidations = [
       validateStringLength(name, 'Name', 100),
       validateStringLength(phone.replace(/\D/g, ''), 'Phone number', 20),
+      validateStringLength(collegeName, 'College name', 100),
       validateStringLength(current_location, 'Current location', 100),
       validateStringLength(profession, 'Profession', 100),
       validateStringLength(qualification, 'Qualification', 100),
@@ -140,6 +142,31 @@ exports.createEnquiry = async (req, res) => {
       });
     }
 
+    // Validate package and subject selection
+    // At least one of packageId or subjectIds must be provided
+    if (!packageId && (!subjectIds || subjectIds.length === 0)) {
+      return res.status(400).json({
+        message: 'At least one of package or subject must be selected'
+      });
+    }
+
+    // If packageId is provided, check the package type
+    if (packageId) {
+      const pkg = await Package.findByPk(packageId);
+      if (!pkg) {
+        return res.status(404).json({
+          message: 'Package not found'
+        });
+      }
+
+      // If packageType is 'others', subjectIds is compulsory
+      if (pkg.packageType === 'others' && (!subjectIds || subjectIds.length === 0)) {
+        return res.status(400).json({
+          message: 'When selecting "others" package, selecting subject is compulsory'
+        });
+      }
+    }
+
     // Hash the default password before storing
     const hashedPassword = await bcrypt.hash('nammaqa@1', 10);
 
@@ -148,6 +175,7 @@ exports.createEnquiry = async (req, res) => {
       name: name.trim(),
       email: email.toLowerCase().trim(),
       phone: phone.replace(/\D/g, ''),
+      collegeName: collegeName?.trim() || null,
       current_location: current_location?.trim() || null,
       profession: profession?.trim() || null,
       qualification: qualification?.trim() || null,
@@ -162,7 +190,7 @@ exports.createEnquiry = async (req, res) => {
       consent: consent || false,
       candidateStatus: candidateStatus || 'enquiry stage',
       password: hashedPassword,
-      globalUser: false,
+      global: true,
       passwordChanged: false,
     });
 
@@ -174,6 +202,7 @@ exports.createEnquiry = async (req, res) => {
         name: enquiry.name,
         email: enquiry.email,
         phone: enquiry.phone,
+        collegeName: enquiry.collegeName,
         current_location: enquiry.current_location,
         profession: enquiry.profession,
         qualification: enquiry.qualification,
@@ -213,6 +242,7 @@ exports.createEnquiry = async (req, res) => {
 exports.getAllEnquiries = async (req, res) => {
   try {
     const enquiries = await Enquiry.findAll({
+      where: { global: true },
       attributes: { exclude: ['password'] },
       include: [
         {
@@ -232,7 +262,7 @@ exports.getAllEnquiries = async (req, res) => {
 
       if (enquiryData.billing) {
         const { amountPaid, balance, packageCost } = enquiryData.billing;
-        
+
         if (balance === 0 || amountPaid >= packageCost) {
           paymentStatus = 'fully paid';
         } else if (amountPaid > 0 && balance > 0) {
@@ -281,10 +311,11 @@ exports.getEnquiryById = async (req, res) => {
  */
 exports.updateEnquiry = async (req, res) => {
   try {
-    // Check if user role is COUNSELLOR or ADMIN
+    // Check if user role is COUNSELLOR, ADMIN, or ACCOUNTS
     const userrole = req.user.role;
-    if (userrole !== 'COUNSELLOR' && userrole !== 'ADMIN') {
-      return res.status(403).json({ message: 'Only ADMIN and COUNSELLOR can edit enquiries' });
+    console.log('User role:', userrole);
+    if (userrole !== 'COUNSELLOR' && userrole !== 'ADMIN' && userrole !== 'ACCOUNTS' && userrole !== 'student') {
+      return res.status(403).json({ message: 'You do not have permission to update enquiries. Please contact your administrator.' });
     }
 
     const enquiry = await Enquiry.findByPk(req.params.id);
@@ -296,6 +327,8 @@ exports.updateEnquiry = async (req, res) => {
       name,
       email,
       phone,
+      password,
+      collegeName,
       current_location,
       profession,
       qualification,
@@ -309,6 +342,9 @@ exports.updateEnquiry = async (req, res) => {
       referral,
       consent,
       candidateStatus,
+      passwordChanged,
+      global,
+      targetedFees
     } = req.body;
 
     const normalizedPhone = phone?.replace(/\D/g, '');
@@ -373,6 +409,7 @@ exports.updateEnquiry = async (req, res) => {
     // Validate text field lengths on update
     const lengthValidations = [
       validateStringLength(name, 'Name', 100),
+      validateStringLength(collegeName, 'College name', 100),
       validateStringLength(current_location, 'Current location', 100),
       validateStringLength(profession, 'Profession', 100),
       validateStringLength(qualification, 'Qualification', 100),
@@ -399,11 +436,52 @@ exports.updateEnquiry = async (req, res) => {
       return res.status(400).json({ message: 'consent must be a boolean value' });
     }
 
+    // Validate passwordChanged if provided
+    if (passwordChanged !== undefined && typeof passwordChanged !== 'boolean') {
+      return res.status(400).json({ message: 'passwordChanged must be a boolean value' });
+    }
+
+    // Validate global if provided
+    if (global !== undefined && typeof global !== 'boolean') {
+      return res.status(400).json({ message: 'global must be a boolean value' });
+    }
+
+    // Validate package and subject selection
+    // Determine the effective packageId and subjectIds after update
+    const effectivePackageId = packageId !== undefined ? packageId : enquiry.packageId;
+    const effectiveSubjectIds = subjectIds !== undefined ? subjectIds : enquiry.subjectIds;
+
+    // At least one of packageId or subjectIds must be provided
+    if (!effectivePackageId && (!effectiveSubjectIds || effectiveSubjectIds.length === 0)) {
+      return res.status(400).json({
+        message: 'At least one of package or subject must be selected'
+      });
+    }
+
+    // If packageId is provided or exists, check the package type
+    if (effectivePackageId) {
+      const pkg = await Package.findByPk(effectivePackageId);
+      if (!pkg) {
+        return res.status(404).json({
+          message: 'Package not found'
+        });
+      }
+
+      // If packageType is 'others', subjectIds is compulsory
+      if (pkg.packageType === 'others' && (!effectiveSubjectIds || effectiveSubjectIds.length === 0)) {
+        return res.status(400).json({
+          message: 'When selecting "others" package, selecting subject is compulsory'
+        });
+      }
+    }
+
     // Update enquiry with trimmed and validated data
     const updateData = {};
     if (name !== undefined) updateData.name = name.trim();
     if (email !== undefined) updateData.email = email.toLowerCase().trim();
     if (phone !== undefined) updateData.phone = phone.replace(/\D/g, '');
+    if (password !== undefined) updateData.password = password;
+    if (collegeName !== undefined) updateData.collegeName = collegeName?.trim() || null;
     if (current_location !== undefined) updateData.current_location = current_location?.trim() || null;
     if (profession !== undefined) updateData.profession = profession?.trim() || null;
     if (qualification !== undefined) updateData.qualification = qualification?.trim() || null;
@@ -416,7 +494,10 @@ exports.updateEnquiry = async (req, res) => {
     if (startTime !== undefined) updateData.startTime = startTime?.trim() || null;
     if (referral !== undefined) updateData.referral = referral?.trim() || null;
     if (consent !== undefined) updateData.consent = consent;
+    if (targetedFees !== undefined) updateData.targetedFees = targetedFees;
     if (candidateStatus !== undefined) updateData.candidateStatus = candidateStatus;
+    if (passwordChanged !== undefined) updateData.passwordChanged = passwordChanged;
+    if (global !== undefined) updateData.global = global;
 
     await enquiry.update(updateData);
 
@@ -428,6 +509,8 @@ exports.updateEnquiry = async (req, res) => {
         name: enquiry.name,
         email: enquiry.email,
         phone: enquiry.phone,
+        password: enquiry.password ? '***' : null,
+        collegeName: enquiry.collegeName,
         current_location: enquiry.current_location,
         profession: enquiry.profession,
         qualification: enquiry.qualification,
@@ -441,6 +524,9 @@ exports.updateEnquiry = async (req, res) => {
         referral: enquiry.referral,
         consent: enquiry.consent,
         candidateStatus: enquiry.candidateStatus,
+        passwordChanged: enquiry.passwordChanged,
+        global: enquiry.global,
+        targetedFees: enquiry.targetedFees,
         updatedAt: enquiry.updatedAt,
       }
     });
@@ -497,47 +583,27 @@ exports.changeEnquiryStatus = async (req, res) => {
 
     const currentStatus = enquiry.candidateStatus;
 
-    // Rule 1: COUNSELLOR or ADMIN can change status to demo
-    if (newStatus === 'demo') {
-      if (!['COUNSELLOR', 'ADMIN'].includes(userrole)) {
-        return res.status(403).json({ message: 'Only COUNSELLOR or ADMIN can change status to demo' });
+    // Rule 1: COUNSELLOR can move from enquiry stage to demo
+    if (currentStatus === 'enquiry stage' && newStatus === 'demo') {
+      if (userrole !== 'COUNSELLOR') {
+        return res.status(403).json({ message: 'Only COUNSELLOR can move from enquiry stage to demo' });
+      }
+      enquiry.isSentBack = false;
+    }
+    // Rule 2: ACCOUNTS can move from demo to class
+    else if (currentStatus === 'demo' && newStatus === 'class') {
+      if (userrole !== 'ACCOUNTS') {
+        return res.status(403).json({ message: 'Only ACCOUNTS can move from demo to class' });
       }
     }
-    // Rule 2: COUNSELLOR or ADMIN can change status from demo to qualified demo
-    else if (currentStatus === 'demo' && newStatus === 'qualified demo') {
-      if (!['COUNSELLOR', 'ADMIN'].includes(userrole)) {
-        return res.status(403).json({ message: 'Only COUNSELLOR or ADMIN can move from demo to qualified demo' });
+    // Rule 3: ACCOUNTS can move from demo to enquiry stage
+    else if (currentStatus === 'demo' && newStatus === 'enquiry stage') {
+      if (userrole !== 'ACCOUNTS') {
+        return res.status(403).json({ message: 'Only ACCOUNTS can move from demo to enquiry stage' });
       }
+      enquiry.isSentBack = true;
     }
-    // Rule 3: ACCOUNTS or ADMIN can move from qualified demo to class or class qualified
-    else if (currentStatus === 'qualified demo' && ['class', 'class qualified'].includes(newStatus)) {
-      if (!['ACCOUNTS', 'ADMIN'].includes(userrole)) {
-        return res.status(403).json({ message: 'Only ACCOUNTS or ADMIN can move from qualified demo to class/class qualified' });
-      }
-    }
-    // Rule 3b: ACCOUNTS or ADMIN can move from class to class qualified
-    else if (currentStatus === 'class' && newStatus === 'class qualified') {
-      if (!['ACCOUNTS', 'ADMIN'].includes(userrole)) {
-        return res.status(403).json({ message: 'Only ACCOUNTS or ADMIN can move from class to class qualified' });
-      }
-    }
-    // Rule 4: HR or ADMIN can move from class qualified to placement
-    else if (currentStatus === 'class qualified' && newStatus === 'placement') {
-      if (!['HR', 'ADMIN'].includes(userrole)) {
-        return res.status(403).json({ message: 'Only HR or ADMIN can move from class qualified to placement' });
-      }
-    }
-    // Rule 4: HR or ADMIN can move from class to placement
-    else if (currentStatus === 'class' && newStatus === 'placement') {
-      if (!['HR', 'ADMIN'].includes(userrole)) {
-        return res.status(403).json({ message: 'Only HR or ADMIN can move from class to placement' });
-      }
-    }
-    // Default: Allow any role to move to enquiry stage
-    else if (newStatus === 'enquiry stage') {
-      // Allow all authenticated users to set enquiry stage
-    }
-    // Disallow unauthorized transitions
+    // Disallow any other transitions
     else {
       return res.status(403).json({ message: `Invalid status transition from ${currentStatus} to ${newStatus}` });
     }
@@ -552,5 +618,73 @@ exports.changeEnquiryStatus = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * ENROLL Student (Mobile App)
+ * Called by student from mobile app to confirm enrollment
+ * Sets global to true (makes enquiry visible in admin UI) and updates status
+ */
+exports.enrollStudent = async (req, res) => {
+  try {
+    // Get enquiryId from JWT token (set by sharedAuth middleware)
+    const enquiryId = req.enquiry?.enquiryId || req.body?.enquiryId;
+
+    // Validate that we have an enquiryId
+    if (!enquiryId) {
+      return res.status(400).json({
+        message: 'Invalid request: Unable to identify student',
+      });
+    }
+
+    // Find the enquiry
+    const enquiry = await Enquiry.findByPk(enquiryId);
+    if (!enquiry) {
+      return res.status(404).json({
+        message: 'Student record not found',
+      });
+    }
+
+    // Update global to true (now visible in admin UI) and set candidateStatus to 'class'
+    await enquiry.update({
+      global: true,
+      candidateStatus: 'enquiry stage',
+    });
+
+
+    return res.status(200).json({
+      success: true,
+      message: 'Enrollment completed successfully. Your record is now visible to the admin team.',
+      data: {
+        id: enquiry.id,
+        name: enquiry.name,
+        email: enquiry.email,
+        phone: enquiry.phone,
+        collegeName: enquiry.collegeName,
+        current_location: enquiry.current_location,
+        profession: enquiry.profession,
+        qualification: enquiry.qualification,
+        experience: enquiry.experience,
+        packageId: enquiry.packageId,
+        batchId: enquiry.batchId,
+        subjectIds: enquiry.subjectIds,
+        trainingMode: enquiry.trainingMode,
+        trainingTime: enquiry.trainingTime,
+        startTime: enquiry.startTime,
+        referral: enquiry.referral,
+        consent: enquiry.consent,
+        candidateStatus: enquiry.candidateStatus,
+        global: enquiry.global,
+        enrolledAt: enquiry.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error('Enrollment error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error completing enrollment',
+      error: error.message,
+    });
   }
 };

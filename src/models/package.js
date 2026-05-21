@@ -4,11 +4,16 @@ module.exports = (sequelize, DataTypes) => {
     {
       name: DataTypes.STRING,
       code: DataTypes.STRING,
+      description: DataTypes.TEXT,
+      type: DataTypes.STRING,
+      duration: DataTypes.INTEGER,
       image: DataTypes.STRING,
       overview: DataTypes.JSON,
       syllabus: DataTypes.JSON,
       prerequisites: DataTypes.JSON,
       startDate: DataTypes.DATE,
+      domain: DataTypes.TEXT,
+      mode: DataTypes.TEXT,
     },
     {
       tableName: 'packages',
