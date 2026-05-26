@@ -5,6 +5,7 @@ const controller = require('../controllers/enquiry.controller');
 
 /* READ — ALL LOGGED-IN USERS */
 router.get('/', auth, controller.getAllEnquiries);
+router.get('/status/fully-paid', auth, role(['ADMIN', 'ACCOUNTS']), controller.getFullyPaidEnquiries);
 router.get('/:id', auth, controller.getEnquiryById);
 
 /* WRITE — ADMIN, COUNSELLOR, and ACCOUNTS */

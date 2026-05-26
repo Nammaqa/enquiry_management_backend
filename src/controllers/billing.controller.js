@@ -644,12 +644,13 @@ exports.savePaymentHistoryByBillingId = async (req, res) => {
       transaction_id: transaction_id || null,
     });
 
-    // Update billing balance
-    const newAmountPaid = parseFloat((parseFloat(billing.amountPaid) + paymentAmount).toFixed(2));
+    // Recalculate billing balance based on all payment histories
+    const allPayments = await BillingPaymentHistory.findAll({ where: { billingId: id } });
+    const newAmountPaid = allPayments.reduce((sum, p) => sum + parseFloat(p.amountPaid), 0);
     const newBalance = parseFloat((parseFloat(billing.packageCost) - parseFloat(billing.discount || 0) - newAmountPaid).toFixed(2));
 
     await billing.update({
-      amountPaid: newAmountPaid,
+      amountPaid: parseFloat(newAmountPaid.toFixed(2)),
       balance: newBalance,
     });
 
