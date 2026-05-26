@@ -261,7 +261,9 @@ exports.getAllEnquiries = async (req, res) => {
       let paymentStatus = 'not paid';
 
       if (enquiryData.billing) {
-        const { amountPaid, balance, packageCost } = enquiryData.billing;
+        const amountPaid = parseFloat(enquiryData.billing.amountPaid || 0);
+        const balance = parseFloat(enquiryData.billing.balance || 0);
+        const packageCost = parseFloat(enquiryData.billing.packageCost || 0);
 
         if (balance === 0 || amountPaid >= packageCost) {
           paymentStatus = 'fully paid';
@@ -286,11 +288,69 @@ exports.getAllEnquiries = async (req, res) => {
 };
 
 /**
+ * GET all fully paid enquiries (ALL ROLES)
+ */
+exports.getFullyPaidEnquiries = async (req, res) => {
+  try {
+    const enquiries = await Enquiry.findAll({
+      where: { 
+        global: true,
+        candidateStatus: 'placement' 
+      },
+      attributes: { exclude: ['password'] },
+      include: [
+        {
+          model: require('../models').Billing,
+          as: 'billing',
+          attributes: ['id', 'packageCost', 'amountPaid', 'discount', 'balance'],
+          required: true,
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    const fullyPaidEnquiries = enquiries
+      .map(enquiry => {
+        const enquiryData = enquiry.toJSON();
+        let paymentStatus = 'not paid';
+
+        if (enquiryData.billing) {
+          const amountPaid = parseFloat(enquiryData.billing.amountPaid || 0);
+          const balance = parseFloat(enquiryData.billing.balance || 0);
+          const packageCost = parseFloat(enquiryData.billing.packageCost || 0);
+
+          if (balance === 0 || amountPaid >= packageCost) {
+            paymentStatus = 'fully paid';
+          }
+        }
+
+        return { ...enquiryData, paymentStatus };
+      })
+      .filter(enquiry => enquiry.paymentStatus === 'fully paid');
+
+    res.json(fullyPaidEnquiries);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
  * GET enquiry by ID (ALL ROLES)
  */
 exports.getEnquiryById = async (req, res) => {
   try {
-    const enquiry = await Enquiry.findByPk(req.params.id);
+    const enquiry = await Enquiry.findByPk(req.params.id, {
+      attributes: { exclude: ['password'] },
+      include: [
+        {
+          model: require('../models').Billing,
+          as: 'billing',
+          attributes: ['id', 'packageCost', 'amountPaid', 'discount', 'balance'],
+          required: false,
+        },
+      ],
+    });
 
     if (!enquiry) {
       return res.status(404).json({
@@ -298,7 +358,25 @@ exports.getEnquiryById = async (req, res) => {
       });
     }
 
-    res.json(enquiry);
+    const enquiryData = enquiry.toJSON();
+    let paymentStatus = 'not paid';
+
+    if (enquiryData.billing) {
+      const amountPaid = parseFloat(enquiryData.billing.amountPaid || 0);
+      const balance = parseFloat(enquiryData.billing.balance || 0);
+      const packageCost = parseFloat(enquiryData.billing.packageCost || 0);
+      
+      if (balance === 0 || amountPaid >= packageCost) {
+        paymentStatus = 'fully paid';
+      } else if (amountPaid > 0 && balance > 0) {
+        paymentStatus = 'partially paid';
+      }
+    }
+
+    res.json({
+      ...enquiryData,
+      paymentStatus,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
