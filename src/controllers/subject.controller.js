@@ -320,8 +320,12 @@ exports.updateSubject = async (req, res) => {
     if (files.image && files.image.length > 0) {
       // If old image exists, delete it
       if (subject.image) {
-        const publicId = subject.image.split('/').pop().split('.')[0];
-        await deleteImage(`enquiry_system/${publicId}`);
+        try {
+          const publicId = subject.image.split('/').pop().split('.')[0];
+          await deleteImage(`enquiry_system/${publicId}`);
+        } catch (imageDeleteError) {
+          console.warn('Warning: Failed to delete old image from Cloudinary:', imageDeleteError.message);
+        }
       }
 
       const imageFile = files.image[0];
@@ -383,11 +387,28 @@ exports.deleteSubject = async (req, res) => {
 
     // Delete image from Cloudinary if it exists
     if (subject.image) {
-      const publicId = subject.image.split('/').pop().split('.')[0];
-      await deleteImage(`enquiry_system/${publicId}`);
+      try {
+        const publicId = subject.image.split('/').pop().split('.')[0];
+        await deleteImage(`enquiry_system/${publicId}`);
+      } catch (imageDeleteError) {
+        console.warn('Warning: Failed to delete image from Cloudinary:', imageDeleteError.message);
+      }
     }
 
-    await subject.destroy();
+    try {
+      const db = require('../models');
+      
+      // Remove this subject from all enquiries' subjectIds arrays
+      await db.sequelize.query(
+        'UPDATE enquiries SET "subjectIds" = array_remove("subjectIds", ?) WHERE ? = ANY("subjectIds")',
+        { replacements: [subject.id, subject.id] }
+      );
+
+      await subject.destroy();
+    } catch (destroyError) {
+      console.error('Error destroying subject record:', destroyError.message, destroyError.stack);
+      throw destroyError;
+    }
 
     res.json({
       message: 'Subject deleted successfully',
