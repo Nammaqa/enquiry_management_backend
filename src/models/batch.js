@@ -3,7 +3,10 @@ module.exports = (sequelize, DataTypes) => {
     'Batch',
     {
       name: DataTypes.STRING,
-      code: DataTypes.STRING,
+      code: {
+        type: DataTypes.STRING,
+        unique: true,
+      },
       status: DataTypes.ENUM('yet to start', 'In progress', 'completed'),
       sessionLink: DataTypes.STRING,
       sessionStartDate: DataTypes.DATE,

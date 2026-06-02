@@ -3,7 +3,10 @@ module.exports = (sequelize, DataTypes) => {
     'Package',
     {
       name: DataTypes.STRING,
-      code: DataTypes.STRING,
+      code: {
+        type: DataTypes.STRING,
+        unique: true,
+      },
       description: DataTypes.TEXT,
       type: DataTypes.STRING,
       duration: DataTypes.INTEGER,

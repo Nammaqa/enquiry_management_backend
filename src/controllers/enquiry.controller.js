@@ -11,6 +11,15 @@ const validateStringLength = (value, fieldName, maxLength) => {
   return null;
 };
 
+const validateAlphabetsOnly = (value, fieldName) => {
+  if (!value) return null;
+  const regex = /^[a-zA-Z\s]+$/;
+  if (!regex.test(value.trim())) {
+    return `${fieldName} must only contain alphabets and spaces`;
+  }
+  return null;
+};
+
 const parseDatabaseLengthError = (error) => {
   const message = error?.message || '';
   if (message.includes('value too long for type character varying')) {
@@ -62,11 +71,19 @@ exports.createEnquiry = async (req, res) => {
       });
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    // Validate email format and domain
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({
         message: 'Invalid email format'
+      });
+    }
+
+    const invalidDomains = ['test.com', 'example.com', 'dummy.com', 'fake.com', 'invalid.com', 'email.com'];
+    const emailDomain = email.split('@')[1]?.toLowerCase();
+    if (invalidDomains.includes(emailDomain)) {
+      return res.status(400).json({
+        message: 'Please provide a genuine email address'
       });
     }
 
@@ -83,6 +100,7 @@ exports.createEnquiry = async (req, res) => {
       validateStringLength(trainingTime, 'Training time', 50),
       validateStringLength(startTime, 'Start time', 50),
       validateStringLength(referral, 'Referral', 100),
+      validateAlphabetsOnly(current_location, 'Current location'),
     ].filter(Boolean);
 
     if (fieldValidations.length > 0) {
@@ -431,9 +449,17 @@ exports.updateEnquiry = async (req, res) => {
 
     // Validate email format if provided
     if (email && email !== enquiry.email) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
       if (!emailRegex.test(email)) {
         return res.status(400).json({ message: 'Invalid email format' });
+      }
+
+      const invalidDomains = ['test.com', 'example.com', 'dummy.com', 'fake.com', 'invalid.com', 'email.com'];
+      const emailDomain = email.split('@')[1]?.toLowerCase();
+      if (invalidDomains.includes(emailDomain)) {
+        return res.status(400).json({
+          message: 'Please provide a genuine email address'
+        });
       }
 
       emailExists = await Enquiry.findOne({
@@ -496,6 +522,7 @@ exports.updateEnquiry = async (req, res) => {
       validateStringLength(trainingTime, 'Training time', 50),
       validateStringLength(startTime, 'Start time', 50),
       validateStringLength(referral, 'Referral', 100),
+      validateAlphabetsOnly(current_location, 'Current location'),
     ].filter(Boolean);
 
     if (lengthValidations.length > 0) {

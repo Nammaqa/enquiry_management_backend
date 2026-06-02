@@ -43,6 +43,15 @@ exports.createBatch = async (req, res) => {
       });
     }
 
+    // Check if code is unique
+    const existingBatch = await Batch.findOne({ where: { code } });
+    if (existingBatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Batch code already exists. It must be unique.',
+      });
+    }
+
     // Check if subject exists - OPTIONAL
     if (subjectId) {
       const subject = await db.Subject.findByPk(subjectId);
@@ -371,6 +380,17 @@ exports.updateBatch = async (req, res) => {
       if (batch.createdBy !== userId && batch.approvalStatus !== 'approved') {
         return res.status(403).json({
           message: 'Access denied. Only approved batches can be updated by other instructors'
+        });
+      }
+    }
+
+    // Check if new code is unique
+    if (code && code !== batch.code) {
+      const existingBatch = await Batch.findOne({ where: { code } });
+      if (existingBatch) {
+        return res.status(400).json({
+          success: false,
+          message: 'Batch code already exists. It must be unique.',
         });
       }
     }

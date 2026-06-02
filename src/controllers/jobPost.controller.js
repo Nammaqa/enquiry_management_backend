@@ -4,6 +4,15 @@ const { JobPost, HigherEducation, Placement, StudentPlacementApplied } = require
 const VALID_WORK_MODES = ['Remote', 'On-site', 'Hybrid'];
 const VALID_JOB_TYPES = ['Full-time', 'Part-time', 'Internship', 'Contract'];
 
+const validateAlphabetsOnly = (value, fieldName) => {
+  if (!value) return null;
+  const regex = /^[a-zA-Z\s]+$/;
+  if (!regex.test(value.trim())) {
+    return `${fieldName} must only contain alphabets and spaces`;
+  }
+  return null;
+};
+
 /**
  * Normalize and validate workMode enum value
  */
@@ -72,6 +81,14 @@ const createJobPost = async (req, res) => {
       return res.status(400).json({
         status: 'error',
         message: 'Missing required fields: companyName, jobTitle, location, workMode, jobType, jobDescription',
+      });
+    }
+
+    const locationError = validateAlphabetsOnly(location, 'Location');
+    if (locationError) {
+      return res.status(400).json({
+        status: 'error',
+        message: locationError,
       });
     }
 
@@ -190,6 +207,16 @@ const updateJobPost = async (req, res) => {
         status: 'error',
         message: 'Job post not found',
       });
+    }
+
+    if (updateData.location) {
+      const locationError = validateAlphabetsOnly(updateData.location, 'Location');
+      if (locationError) {
+        return res.status(400).json({
+          status: 'error',
+          message: locationError,
+        });
+      }
     }
 
     // Normalize workMode if provided

@@ -113,6 +113,15 @@ exports.createPackage = async (req, res) => {
       });
     }
 
+    // Check if code is unique
+    const existingPackage = await Package.findOne({ where: { code } });
+    if (existingPackage) {
+      return res.status(400).json({
+        success: false,
+        message: 'Package code already exists. It must be unique.',
+      });
+    }
+
     // Validate type field
     if (type && !['starter', 'advance', 'expert'].includes(type)) {
       return res.status(400).json({
@@ -423,6 +432,18 @@ exports.updatePackage = async (req, res) => {
       if (domain !== undefined) updateData.domain = domain;
       if (mode !== undefined) updateData.mode = mode;
       updateData.image = imageUrl;
+    }
+
+    // Check if new code is unique
+    if (updateData.code && updateData.code !== pkg.code) {
+      const existingPackage = await Package.findOne({ where: { code: updateData.code }, transaction });
+      if (existingPackage) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: 'Package code already exists. It must be unique.',
+        });
+      }
     }
 
     // Validate and update subjects if provided
