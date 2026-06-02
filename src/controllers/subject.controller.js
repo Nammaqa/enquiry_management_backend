@@ -49,7 +49,7 @@ exports.createSubject = async (req, res) => {
     } else {
       // Handle JSON request body
       fields = {};
-      for (const [key, value] of Object.entries(req.body)) {
+      for (const [key, value] of Object.entries(req.body || {})) {
         fields[key] = [value]; // Convert to array format for consistency
       }
     }
@@ -70,6 +70,15 @@ exports.createSubject = async (req, res) => {
     if (!name || !code) {
       return res.status(400).json({
         message: 'name and code are required',
+      });
+    }
+
+    // Check if code is unique
+    const existingSubject = await Subject.findOne({ where: { code } });
+    if (existingSubject) {
+      return res.status(400).json({
+        success: false,
+        message: 'Subject code already exists. It must be unique.',
       });
     }
 
@@ -282,7 +291,7 @@ exports.updateSubject = async (req, res) => {
     } else {
       // Handle JSON request body
       fields = {};
-      for (const [key, value] of Object.entries(req.body)) {
+      for (const [key, value] of Object.entries(req.body || {})) {
         fields[key] = [value]; // Convert to array format for consistency
       }
     }
@@ -312,6 +321,17 @@ exports.updateSubject = async (req, res) => {
       return res.status(400).json({
         message: 'duration must be a valid number',
       });
+    }
+
+    // Check if new code is unique
+    if (code && code !== subject.code) {
+      const existingSubject = await Subject.findOne({ where: { code } });
+      if (existingSubject) {
+        return res.status(400).json({
+          success: false,
+          message: 'Subject code already exists. It must be unique.',
+        });
+      }
     }
 
     let imageUrl = subject.image;
@@ -359,7 +379,7 @@ exports.updateSubject = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
