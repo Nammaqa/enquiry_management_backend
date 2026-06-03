@@ -12,9 +12,9 @@ exports.createOrUpdateBilling = async (req, res) => {
       discount,
       gst,
       subjectIds = [],
-      subjectPayments = [], // Array of {subjectId, amountPaid}
       transaction_id,
       paymentMode,
+      denomination,
     } = req.body;
 
     let packageType = req.body.packageType;
@@ -85,6 +85,7 @@ exports.createOrUpdateBilling = async (req, res) => {
             amountPaid: finalAmountPaid,
             paymentMode: paymentMode || null,
             transaction_id: transaction_id || null,
+            denomination: denomination || null,
           });
         }
 
@@ -112,6 +113,7 @@ exports.createOrUpdateBilling = async (req, res) => {
           amountPaid: finalAmountPaid,
           paymentMode: paymentMode || null,
           transaction_id: transaction_id || null,
+          denomination: denomination || null,
         });
       }
 
@@ -587,6 +589,7 @@ exports.getPaymentHistoryByBillingId = async (req, res) => {
         amountPaid: paymentAmount,
         paymentMode: payment.paymentMode,
         transaction_id: payment.transaction_id,
+        denomination: payment.denomination,
         balanceAtTime,
         balanceAfterPayment: remainingBalance,
         totalPaidSoFar: cumulativePaid,
@@ -618,6 +621,7 @@ exports.savePaymentHistoryByBillingId = async (req, res) => {
       amountPaid,
       paymentMode,
       transaction_id,
+      denomination,
     } = req.body;
 
     // Validate billing exists
@@ -642,6 +646,7 @@ exports.savePaymentHistoryByBillingId = async (req, res) => {
       amountPaid: paymentAmount,
       paymentMode: paymentMode || null,
       transaction_id: transaction_id || null,
+      denomination: denomination || null,
     });
 
     // Recalculate billing balance based on all payment histories
