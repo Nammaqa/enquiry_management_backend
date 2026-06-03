@@ -793,3 +793,38 @@ exports.enrollStudent = async (req, res) => {
     });
   }
 };
+
+/**
+ * CHECK phone existence in Enquiry table
+ * Accepts `phone` in body or query. Optional `excludeId` to ignore a record (useful for updates).
+ */
+exports.checkPhone = async (req, res) => {
+  try {
+    const phone = req.body.phone || req.query.phone;
+    if (!phone) {
+      return res.status(400).json({ message: 'Phone is required' });
+    }
+
+    const normalized = phone.replace(/\D/g, '');
+    const phoneRegex = /^\d{10,}$/;
+    if (!phoneRegex.test(normalized)) {
+      return res.status(400).json({ message: 'Phone number must contain at least 10 digits' });
+    }
+
+    const excludeId = req.body.excludeId || req.query.excludeId;
+    const where = { phone: normalized };
+    if (excludeId) {
+      where.id = { [Op.ne]: excludeId };
+    }
+
+    const existing = await Enquiry.findOne({ where });
+
+    return res.status(200).json({
+      exists: !!existing,
+      message: existing ? 'Phone number already exists' : 'Phone number available'
+    });
+  } catch (error) {
+    console.error('Error checking phone:', error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
