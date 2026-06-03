@@ -14,6 +14,9 @@ router.put('/:id', auth, role(['ADMIN', 'COUNSELLOR', 'ACCOUNTS','student']), co
 router.delete('/:id', auth, role(['ADMIN', 'COUNSELLOR']), controller.deleteEnquiry);
 
 
+/* Check phone existence (public) */
+router.post('/check-phone', controller.checkPhone);
+
 /* Change Enquiry Status */
 router.post('/change-status', auth, role(['ADMIN', 'COUNSELLOR', 'HR', 'ACCOUNTS']),
     controller.changeEnquiryStatus);
