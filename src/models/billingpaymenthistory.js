@@ -30,6 +30,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         comment: 'Transaction ID for UPI/Card payments',
       },
+      denomination: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Cash denomination e.g. 500x2',
+      },
     },
     {
       tableName: 'billing_payment_history',
