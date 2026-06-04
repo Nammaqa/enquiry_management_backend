@@ -13,6 +13,9 @@ router.get('/:id', auth, role(['ADMIN', 'ACCOUNTS', 'COUNSELLOR']), controller.g
 /* WRITE — ALL LOGGED-IN USERS (CREATE/UPDATE COMBINED) */
 router.post('/', auth, role(['ADMIN', 'ACCOUNTS', 'COUNSELLOR']), controller.createOrUpdateBilling);
 
+/* POS RECEIPT UPLOAD */
+router.post('/upload-receipt', auth, role(['ADMIN', 'ACCOUNTS', 'COUNSELLOR']), controller.uploadReceipt);
+
 /* UPDATE — ADMIN and ACCOUNTS */
 router.put('/:id', auth, role(['ADMIN', 'ACCOUNTS','COUNSELLOR']), controller.updateBilling);
 

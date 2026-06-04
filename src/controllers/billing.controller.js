@@ -1,4 +1,7 @@
 const { Billing, Enquiry, Subject, BillingPaymentHistory } = require('../models');
+const { Formidable } = require('formidable');
+const fs = require('fs').promises;
+const { uploadImage } = require('../utils/cloudinary');
 
 /**
  * CREATE or UPDATE Billing (COMBINED API - Package or Individual Subjects)
@@ -15,6 +18,7 @@ exports.createOrUpdateBilling = async (req, res) => {
       transaction_id,
       paymentMode,
       denomination,
+      posReceiptUrl,
     } = req.body;
 
     let packageType = req.body.packageType;
@@ -86,6 +90,7 @@ exports.createOrUpdateBilling = async (req, res) => {
             paymentMode: paymentMode || null,
             transaction_id: transaction_id || null,
             denomination: denomination || null,
+            posReceiptUrl: posReceiptUrl || null,
           });
         }
 
@@ -114,6 +119,7 @@ exports.createOrUpdateBilling = async (req, res) => {
           paymentMode: paymentMode || null,
           transaction_id: transaction_id || null,
           denomination: denomination || null,
+          posReceiptUrl: posReceiptUrl || null,
         });
       }
 
@@ -590,6 +596,7 @@ exports.getPaymentHistoryByBillingId = async (req, res) => {
         paymentMode: payment.paymentMode,
         transaction_id: payment.transaction_id,
         denomination: payment.denomination,
+        posReceiptUrl: payment.posReceiptUrl,
         balanceAtTime,
         balanceAfterPayment: remainingBalance,
         totalPaidSoFar: cumulativePaid,
@@ -622,6 +629,7 @@ exports.savePaymentHistoryByBillingId = async (req, res) => {
       paymentMode,
       transaction_id,
       denomination,
+      posReceiptUrl,
     } = req.body;
 
     // Validate billing exists
@@ -647,6 +655,7 @@ exports.savePaymentHistoryByBillingId = async (req, res) => {
       paymentMode: paymentMode || null,
       transaction_id: transaction_id || null,
       denomination: denomination || null,
+      posReceiptUrl: posReceiptUrl || null,
     });
 
     // Recalculate billing balance based on all payment histories
@@ -673,6 +682,41 @@ exports.savePaymentHistoryByBillingId = async (req, res) => {
   } catch (error) {
     console.error('Save Payment History Error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+/**
+ * Upload POS receipt
+ */
+exports.uploadReceipt = async (req, res) => {
+  const form = new Formidable({ multiples: false, maxFileSize: 50 * 1024 * 1024, keepExtensions: true });
+
+  try {
+    const [fields, files] = await form.parse(req);
+    const uploadedFile = files.posReceipt ? files.posReceipt[0] : null;
+
+    if (!uploadedFile) {
+      return res.status(400).json({ success: false, message: 'POS Receipt file is required' });
+    }
+
+    const fileBuffer = await fs.readFile(uploadedFile.filepath);
+    const uniqueName = `pos-receipt-${Date.now()}`;
+
+    let posReceiptUrl = null;
+    try {
+      const uploadResult = await uploadImage(fileBuffer, uniqueName);
+      posReceiptUrl = uploadResult.secure_url;
+    } catch (uploadError) {
+      console.error('Cloudinary upload error:', uploadError);
+      return res.status(400).json({ message: 'Failed to upload receipt', error: uploadError.message });
+    } finally {
+      await fs.unlink(uploadedFile.filepath).catch(() => {});
+    }
+
+    res.status(200).json({ success: true, url: posReceiptUrl });
+  } catch (error) {
+    console.error('Error uploading receipt:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
