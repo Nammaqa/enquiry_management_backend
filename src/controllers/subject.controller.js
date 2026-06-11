@@ -89,8 +89,9 @@ exports.createSubject = async (req, res) => {
       });
     }
 
-    // Validate duration is a number
-    if (duration !== null && duration !== undefined && isNaN(duration)) {
+    // Treat duration as optional: only validate when provided (non-empty)
+    const isProvided = (v) => v !== null && v !== undefined && v !== '';
+    if (isProvided(duration) && isNaN(Number(duration))) {
       return res.status(400).json({
         message: 'duration must be a valid number',
       });
@@ -116,7 +117,7 @@ exports.createSubject = async (req, res) => {
       code,
       description,
       type,
-      duration: duration ? parseInt(duration) : null,
+      duration: isProvided(duration) ? parseInt(duration, 10) : null,
       startDate: startDate || null,
       image: imageUrl,
       overview: safeJsonParse(overview),
@@ -316,8 +317,9 @@ exports.updateSubject = async (req, res) => {
       });
     }
 
-    // Validate duration is a number
-    if (duration !== null && duration !== undefined && isNaN(duration)) {
+    // Treat duration as optional: only validate when provided (non-empty)
+    const isProvided = (v) => v !== null && v !== undefined && v !== '';
+    if (isProvided(duration) && isNaN(Number(duration))) {
       return res.status(400).json({
         message: 'duration must be a valid number',
       });
@@ -363,7 +365,7 @@ exports.updateSubject = async (req, res) => {
       code: code || subject.code,
       description: description !== undefined && description !== null ? description : subject.description,
       type: type !== undefined && type !== null ? type : subject.type,
-      duration: duration !== undefined && duration !== null ? parseInt(duration) : subject.duration,
+      duration: isProvided(duration) ? parseInt(duration, 10) : subject.duration,
       startDate: startDate || subject.startDate,
       image: imageUrl,
       overview: overview !== undefined ? safeJsonParse(overview) : subject.overview,
