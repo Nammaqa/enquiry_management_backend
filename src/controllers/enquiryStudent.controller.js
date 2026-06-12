@@ -15,9 +15,10 @@ const sequelize = db.sequelize;
 
 const validateAlphabetsOnly = (value, fieldName) => {
   if (!value) return null;
-  const regex = /^[a-zA-Z\s]+$/;
+  // Allow letters, numbers, spaces and common punctuation; reject control chars
+  const regex = /^[^\x00-\x1F]+$/;
   if (!regex.test(value.trim())) {
-    return `${fieldName} must only contain alphabets and spaces`;
+    return `${fieldName} contains invalid characters`;
   }
   return null;
 };
