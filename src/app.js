@@ -40,7 +40,8 @@ app.get('/api/health', (req, res) => {
     message: 'API is healthy',
     timestamp: new Date().toISOString(),
     nodeEnv: process.env.NODE_ENV,
-    nodeVersion: process.version
+    nodeVersion: process.version,
+    databaseurl:process.env.DATABASE_URL
   });
 });
 
@@ -69,6 +70,7 @@ app.get('/api/debug', async (req, res) => {
 });
 
 app.use('/api/auth', require('./routes/auth.routes'));
+app.use('/api/mobile/auth', require('./routes/mobile/auth.routes'));
 app.use('/api/users', require('./routes/user.routes'));
 app.use('/api/packages', require('./routes/package.routes'));
 app.use('/api/subjects', require('./routes/subject.routes'));
@@ -101,4 +103,4 @@ app.use((req, res) => {
   });
 });
 
-module.exports = app; 
+module.exports = app;

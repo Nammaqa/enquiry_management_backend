@@ -11,18 +11,20 @@ exports.createBatch = async (req, res) => {
   try {
     const [fields, files] = await form.parse(req);
 
-    // Extract fields from formidable
-    const name = fields.name ? fields.name[0] : null;
-    const code = fields.code ? fields.code[0] : null;
-    const sessionStartDate = fields.sessionStartDate ? fields.sessionStartDate[0] : null;
-    const sessionEndDate = fields.sessionEndDate ? fields.sessionEndDate[0] : null;
-    const sessionTime = fields.sessionTime ? fields.sessionTime[0] : null;
-    const sessionLink = fields.sessionLink ? fields.sessionLink[0] : null;
-    const status = fields.status ? fields.status[0] : null;
-    const numberOfStudents = fields.numberOfStudents ? parseInt(fields.numberOfStudents[0]) : 0;
-    const subjectId = fields.subjectId ? parseInt(fields.subjectId[0]) : null;
-    const instructorId = fields.instructorId ? parseInt(fields.instructorId[0]) : null;
-    const imageFile = files.image ? files.image[0] : null;
+    // Extract fields from formidable (handle both array and string values)
+    const extractField = (field) => Array.isArray(field) ? field[0] : field;
+    
+    const name = fields.name ? extractField(fields.name) : null;
+    const code = fields.code ? extractField(fields.code) : null;
+    const sessionStartDate = fields.sessionStartDate ? extractField(fields.sessionStartDate) : null;
+    const sessionEndDate = fields.sessionEndDate ? extractField(fields.sessionEndDate) : null;
+    const sessionTime = fields.sessionTime ? extractField(fields.sessionTime) : null;
+    const sessionLink = fields.sessionLink ? extractField(fields.sessionLink) : null;
+    const status = fields.status ? extractField(fields.status) : null;
+    const numberOfStudents = fields.numberOfStudents ? parseInt(extractField(fields.numberOfStudents)) : 0;
+    const subjectId = fields.subjectId ? parseInt(extractField(fields.subjectId)) : null;
+    const instructorId = fields.instructorId ? parseInt(extractField(fields.instructorId)) : null;
+    const imageFile = files.image ? (Array.isArray(files.image) ? files.image[0] : files.image) : null;
 
     const userId = req.user.id;  // From authenticated User
     const userRole = req.user.role;  // Role validation
@@ -37,9 +39,18 @@ exports.createBatch = async (req, res) => {
 
     console.log('Create batch request:', { name, code, subjectId, userRole, userId });
 
-    if (!name || !code || !sessionStartDate || !sessionTime) {
+    if (!name || !code || !sessionStartDate || !sessionTime || !subjectId) {
       return res.status(400).json({
-        message: 'name, code, sessionStartDate, and sessionTime are required',
+        message: 'name, code, subjectId, sessionStartDate, and sessionTime are required',
+      });
+    }
+
+    // Check if code is unique
+    const existingBatch = await Batch.findOne({ where: { code } });
+    if (existingBatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Batch code already exists. It must be unique.',
       });
     }
 
@@ -371,6 +382,17 @@ exports.updateBatch = async (req, res) => {
       if (batch.createdBy !== userId && batch.approvalStatus !== 'approved') {
         return res.status(403).json({
           message: 'Access denied. Only approved batches can be updated by other instructors'
+        });
+      }
+    }
+
+    // Check if new code is unique
+    if (code && code !== batch.code) {
+      const existingBatch = await Batch.findOne({ where: { code } });
+      if (existingBatch) {
+        return res.status(400).json({
+          success: false,
+          message: 'Batch code already exists. It must be unique.',
         });
       }
     }

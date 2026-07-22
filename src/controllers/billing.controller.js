@@ -1,68 +1,229 @@
-const { Billing, Enquiry } = require('../models');
+const { Billing, Enquiry, Subject, BillingPaymentHistory } = require('../models');
+const { Formidable } = require('formidable');
+const fs = require('fs').promises;
+const { uploadImage } = require('../utils/cloudinary');
 
 /**
- * CREATE or UPDATE Billing (COMBINED API)
+ * CREATE or UPDATE Billing (COMBINED API - Package or Individual Subjects)
  */
 exports.createOrUpdateBilling = async (req, res) => {
   try {
-    const { enquiryId, packageCost, amountPaid, discount } = req.body;
+    const {
+      enquiryId,
+      packageCost,
+      amountPaid,
+      discount,
+      gst,
+      subjectIds = [],
+      transaction_id,
+      paymentMode,
+      denomination,
+      posReceiptUrl,
+    } = req.body;
+
+    let packageType = req.body.packageType;
+    if (typeof packageType !== 'string' || !packageType.trim()) {
+      packageType = 'package';
+    } else {
+      packageType = packageType.trim().toLowerCase();
+    }
 
     // Validate required fields
     if (!enquiryId) {
       return res.status(400).json({ message: 'Enquiry ID is required' });
     }
 
-    if (packageCost === undefined) {
-      return res.status(400).json({ message: 'Package cost is required' });
-    }
-
-    if (amountPaid === undefined) {
-      return res.status(400).json({ message: 'Amount paid is required' });
-    }
-
     // Check if enquiry exists
     const enquiry = await Enquiry.findByPk(enquiryId);
     if (!enquiry) {
       return res.status(404).json({ message: 'Enquiry not found' });
-    }                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+    }
 
-    // Calculate balance: packageCost - discount - amountPaid
-    const finalDiscount = discount || 0;
-    const balance = packageCost - finalDiscount - amountPaid;
-
-    // Check if billing record already exists for this enquiry
     let billing = await Billing.findOne({ where: { enquiryId } });
 
-    if (billing) {
-      // Update existing billing
-      billing.packageCost = packageCost;
-      billing.amountPaid = amountPaid;
-      billing.discount = finalDiscount;
-      billing.balance = balance;
-      await billing.save();
+    // CASE 1: Package-based billing
+    if (packageType === 'package') {
+      const finalDiscount = discount || 0;
+      const gstPercentage = gst || 0;
+      const currentPackageCost = billing ? parseFloat(billing.packageCost) : undefined;
+      const resolvedPackageCost = packageCost !== undefined
+        ? parseFloat(packageCost)
+        : currentPackageCost !== undefined
+          ? currentPackageCost
+          : amountPaid !== undefined
+            ? parseFloat(amountPaid)
+            : undefined;
 
-      res.status(200).json({
-        message: 'Billing updated successfully',
-        billing,
-      });
-    } else {
-      // Create new billing
+      if (resolvedPackageCost === undefined) {
+        return res.status(400).json({ message: 'Package cost is required for a new billing record' });
+      }
+
+      const finalAmountPaid = amountPaid !== undefined ? parseFloat(amountPaid) : 0;
+      const costAfterDiscount = resolvedPackageCost - finalDiscount;
+      const gstAmount = costAfterDiscount * (gstPercentage / 100);
+      const totalCost = costAfterDiscount;
+      const balance = parseFloat((totalCost - finalAmountPaid).toFixed(2));
+
+      if (billing) {
+        // ACCUMULATE the new payment with existing amount paid
+        const newTotalAmountPaid = parseFloat((parseFloat(billing.amountPaid) + finalAmountPaid).toFixed(2));
+        const newBalance = parseFloat((totalCost - newTotalAmountPaid).toFixed(2));
+
+        billing.packageCost = resolvedPackageCost;
+        billing.amountPaid = newTotalAmountPaid;
+        billing.discount = finalDiscount;
+        billing.gst = gstPercentage;
+        billing.gstAmount = parseFloat(gstAmount.toFixed(2));
+        billing.balance = newBalance;
+        billing.packageType = 'package';
+        if (transaction_id !== undefined) {
+          billing.transaction_id = transaction_id;
+        }
+        billing.subjectIds = null;
+        billing.subjectWiseBreakdown = null;
+        await billing.save();
+
+        if (finalAmountPaid > 0) {
+          await BillingPaymentHistory.create({
+            billingId: billing.id,
+            amountPaid: finalAmountPaid,
+            paymentMode: paymentMode || null,
+            transaction_id: transaction_id || null,
+            denomination: denomination || null,
+            posReceiptUrl: posReceiptUrl || null,
+          });
+        }
+
+        return res.status(200).json({
+          message: 'Billing updated successfully',
+          billing,
+        });
+      }
+
       billing = await Billing.create({
         enquiryId,
-        packageCost,
-        amountPaid,
+        packageCost: resolvedPackageCost,
+        amountPaid: finalAmountPaid,
         discount: finalDiscount,
-        balance,
+        gst: gstPercentage,
+        gstAmount: parseFloat(gstAmount.toFixed(2)),
+        balance: parseFloat(balance.toFixed(2)),
+        packageType: 'package',
+        transaction_id,
       });
 
-      res.status(201).json({
+      if (finalAmountPaid > 0) {
+        await BillingPaymentHistory.create({
+          billingId: billing.id,
+          amountPaid: finalAmountPaid,
+          paymentMode: paymentMode || null,
+          transaction_id: transaction_id || null,
+          denomination: denomination || null,
+          posReceiptUrl: posReceiptUrl || null,
+        });
+      }
+
+      return res.status(201).json({
         message: 'Billing created successfully',
         billing,
       });
     }
+
+    // CASE 2: Individual subjects billing
+    else if (packageType === 'individual') {
+      if (!subjectIds || subjectIds.length === 0) {
+        return res.status(400).json({ message: 'Subject IDs are required for individual billing' });
+      }
+
+      // Fetch all subjects to get their fees
+      const subjects = await Subject.findAll({
+        where: { id: subjectIds }
+      });
+
+      if (subjects.length === 0) {
+        return res.status(404).json({ message: 'No subjects found' });
+      }
+
+      // Build subject-wise breakdown
+      const breakdown = subjects.map(subject => {
+        const subjectPayment = subjectPayments.find(p => p.subjectId === subject.id) || {};
+        const fee = parseFloat(subject.fees) || 0;
+        const paid = parseFloat(subjectPayment.amountPaid) || 0;
+        const subBalance = fee - paid;
+
+        return {
+          subjectId: subject.id,
+          subjectName: subject.name,
+          fee: fee,
+          paid: parseFloat(paid.toFixed(2)),
+          balance: parseFloat(subBalance.toFixed(2))
+        };
+      });
+
+      // Calculate totals
+      const totalPackageCost = breakdown.reduce((sum, b) => sum + b.fee, 0);
+      const totalAmountPaid = breakdown.reduce((sum, b) => sum + b.paid, 0);
+      const finalDiscount = discount || 0;
+      const gstPercentage = gst || 0;
+
+      const costAfterDiscount = totalPackageCost - finalDiscount;
+      const gstAmount = costAfterDiscount * (gstPercentage / 100);
+      const totalCost = costAfterDiscount;  // Package cost already includes GST
+      const balance = totalCost - totalAmountPaid;
+
+      if (billing) {
+        // ACCUMULATE the new payment with existing amount paid
+        const newTotalAmountPaidIndividual = parseFloat((parseFloat(billing.amountPaid) + parseFloat(totalAmountPaid)).toFixed(2));
+        const newBalanceIndividual = parseFloat((totalCost - newTotalAmountPaidIndividual).toFixed(2));
+
+        billing.packageCost = parseFloat(totalPackageCost.toFixed(2));
+        billing.amountPaid = newTotalAmountPaidIndividual;
+        billing.discount = finalDiscount;
+        billing.gst = gstPercentage;
+        billing.gstAmount = parseFloat(gstAmount.toFixed(2));
+        billing.balance = newBalanceIndividual;
+        billing.packageType = 'individual';
+        if (transaction_id !== undefined) {
+          billing.transaction_id = transaction_id;
+        }
+        billing.subjectIds = subjectIds;
+        billing.subjectWiseBreakdown = breakdown;
+        await billing.save();
+
+        return res.status(200).json({
+          message: 'Billing updated successfully',
+          billing,
+        });
+      } else {
+        billing = await Billing.create({
+          enquiryId,
+          packageCost: parseFloat(totalPackageCost.toFixed(2)),
+          amountPaid: parseFloat(totalAmountPaid.toFixed(2)),
+          discount: finalDiscount,
+          gst: gstPercentage,
+          gstAmount: parseFloat(gstAmount.toFixed(2)),
+          balance: parseFloat(balance.toFixed(2)),
+          packageType: 'individual',
+          transaction_id,
+          subjectIds: subjectIds,
+          subjectWiseBreakdown: breakdown,
+        });
+
+        return res.status(201).json({
+          message: 'Billing created successfully',
+          billing,
+        });
+      }
+    }
+
+    return res.status(400).json({ message: 'Invalid packageType. Use "package" or "individual"' });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Billing Create/Update Error:', error);
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
   }
 };
 
@@ -87,11 +248,35 @@ exports.getBillingByEnquiryId = async (req, res) => {
           as: 'enquiry',
           attributes: ['id', 'name', 'email', 'phone'],
         },
+        {
+          model: BillingPaymentHistory,
+          as: 'paymentHistory',
+          order: [['createdAt', 'ASC']],
+        },
       ],
     });
 
     if (!billing) {
-      return res.status(404).json({
+      return res.status(200).json({
+        id: null,
+        enquiryId,
+        packageCost: 0,
+        amountPaid: 0,
+        discount: 0,
+        gst: 0,
+        gstAmount: 0,
+        balance: 0,
+        packageType: 'package',
+        transaction_id: null,
+        subjectIds: [],
+        subjectWiseBreakdown: [],
+        enquiry: {
+          id: enquiry.id,
+          name: enquiry.name,
+          email: enquiry.email,
+          phone: enquiry.phone,
+        },
+        paymentHistory: [],
         message: 'Billing record not found for this enquiry',
       });
     }
@@ -114,6 +299,11 @@ exports.getAllBillings = async (req, res) => {
           model: require('../models').Enquiry,
           as: 'enquiry',
           attributes: ['id', 'name', 'email', 'phone'],
+        },
+        {
+          model: BillingPaymentHistory,
+          as: 'paymentHistory',
+          order: [['createdAt', 'ASC']],
         },
       ],
       order: [['createdAt', 'DESC']],
@@ -138,6 +328,11 @@ exports.getBillingById = async (req, res) => {
           as: 'enquiry',
           attributes: ['id', 'name', 'email', 'phone'],
         },
+        {
+          model: BillingPaymentHistory,
+          as: 'paymentHistory',
+          order: [['createdAt', 'ASC']],
+        },
       ],
     });
 
@@ -148,6 +343,191 @@ exports.getBillingById = async (req, res) => {
     }
 
     res.json(billing);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+// exports.updateBilling = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { 
+//       packageCost, 
+//       amountPaid, 
+//       discount, 
+//       gst,
+//       packageType,
+//       subjectIds = [],
+//       subjectPayments = [] // Array of {subjectId, amountPaid}
+//     } = req.body;
+
+//     // Find billing record
+//     const billing = await Billing.findByPk(id);
+//     if (!billing) {
+//       return res.status(404).json({ message: 'Billing not found' });
+//     }
+
+//     // Validate amountPaid
+//     if (amountPaid === undefined) {
+//       return res.status(400).json({ message: 'Amount paid is required' });
+//     }
+
+//     // Use provided values or fall back to existing database values
+//     const finalPackageCost = packageCost !== undefined ? packageCost : billing.packageCost;
+//     const finalDiscount = discount !== undefined ? discount : billing.discount;
+//     const finalGst = gst !== undefined ? gst : billing.gst;
+//     const finalPackageType = packageType !== undefined ? packageType : billing.packageType;
+
+//     // CASE 1: Package-based billing
+//     if (finalPackageType === 'package') {
+//       const costAfterDiscount = parseFloat(finalPackageCost) - parseFloat(finalDiscount);
+//       // GST calculation - using the fixed formula for inclusive pricing
+//       const gstAmount = costAfterDiscount > 0 ? 
+//         parseFloat((costAfterDiscount * (parseFloat(finalGst) / (100 + parseFloat(finalGst)))).toFixed(2)) : 0;
+//       const totalCost = costAfterDiscount;
+
+//       // ACCUMULATE the new payment with existing amount paid
+//       const newTotalAmountPaid = parseFloat((parseFloat(billing.amountPaid) + parseFloat(amountPaid)).toFixed(2));
+//       let newBalance = parseFloat((totalCost - newTotalAmountPaid).toFixed(2));
+
+//       // Cap balance at 0 (no negative balances)
+//       if (newBalance < 0) {
+//         newBalance = 0;
+//       }
+
+//       await billing.update({
+//         packageCost: finalPackageCost,
+//         amountPaid: newTotalAmountPaid,
+//         discount: finalDiscount,
+//         gst: finalGst,
+//         gstAmount: gstAmount,
+//         balance: newBalance,
+//         packageType: 'package',
+//         subjectIds: null,
+//         subjectWiseBreakdown: null,
+//       });
+
+//       return res.status(200).json({
+//         message: 'Billing updated successfully',
+//         billing: await Billing.findByPk(id),
+//       });
+//     }
+
+//     // CASE 2: Individual subjects billing
+//     else if (finalPackageType === 'individual') {
+//       const subjectIdsToUse = subjectIds && subjectIds.length > 0 ? subjectIds : billing.subjectIds;
+
+//       if (!subjectIdsToUse || subjectIdsToUse.length === 0) {
+//         return res.status(400).json({ message: 'Subject IDs are required for individual billing' });
+//       }
+
+//       // Fetch all subjects to get their fees
+//       const subjects = await Subject.findAll({
+//         where: { id: subjectIdsToUse }
+//       });
+
+//       if (subjects.length === 0) {
+//         return res.status(404).json({ message: 'No subjects found' });
+//       }
+
+//       // Build subject-wise breakdown with accumulated payments
+//       const breakdown = subjects.map(subject => {
+//         const newSubjectPayment = subjectPayments.find(p => p.subjectId === subject.id) || {};
+//         const fee = parseFloat(subject.fees) || 0;
+//         const newPaymentAmount = parseFloat(newSubjectPayment.amountPaid) || 0;
+
+//         // Find existing paid amount for this subject from breakdown
+//         const existingBreakdown = billing.subjectWiseBreakdown || [];
+//         const existingPaid = existingBreakdown.find(b => b.subjectId === subject.id)?.paid || 0;
+
+//         // Accumulate payments
+//         const totalPaid = parseFloat((existingPaid + newPaymentAmount).toFixed(2));
+//         let subBalance = fee - totalPaid;
+//         if (subBalance < 0) {
+//           subBalance = 0;
+//         }
+
+//         return {
+//           subjectId: subject.id,
+//           subjectName: subject.name,
+//           fee: fee,
+//           paid: totalPaid,
+//           balance: subBalance
+//         };
+//       });
+
+//       // Calculate totals
+//       const totalPackageCost = breakdown.reduce((sum, b) => sum + b.fee, 0);
+//       const totalAmountPaidSum = breakdown.reduce((sum, b) => sum + b.paid, 0);
+//       const costAfterDiscount = parseFloat(totalPackageCost) - parseFloat(finalDiscount);
+
+//       // GST calculation - using the fixed formula for inclusive pricing
+//       const gstAmount = costAfterDiscount > 0 ? 
+//         parseFloat((costAfterDiscount * (parseFloat(finalGst) / (100 + parseFloat(finalGst)))).toFixed(2)) : 0;
+//       const totalCost = costAfterDiscount;
+
+//       let balance = parseFloat((totalCost - totalAmountPaidSum).toFixed(2));
+//       if (balance < 0) {
+//         balance = 0;
+//       }
+
+//       await billing.update({
+//         packageCost: parseFloat(totalPackageCost.toFixed(2)),
+//         amountPaid: parseFloat(totalAmountPaidSum.toFixed(2)),
+//         discount: finalDiscount,
+//         gst: finalGst,
+//         gstAmount: gstAmount,
+//         balance: balance,
+//         packageType: 'individual',
+//         subjectIds: subjectIdsToUse,
+//         subjectWiseBreakdown: breakdown,
+//       });
+
+//       return res.status(200).json({
+//         message: 'Billing updated successfully',
+//         billing: await Billing.findByPk(id),
+//       });
+//     }
+
+//     return res.status(400).json({ message: 'Invalid packageType in billing record' });
+
+//   } catch (error) {
+//     console.error('Billing Update Error:', error);
+//     res.status(500).json({ 
+//       message: 'Server error',
+//       error: error.message 
+//     });
+//   }
+// };
+exports.updateBilling = async (req, res) => {
+  try {
+    const billing = await Billing.findByPk(req.params.id);
+
+    if (!billing) {
+      return res.status(404).json({ message: 'Billing not found' });
+    }
+
+    const { packageCost, amountPaid, discount } = req.body;
+
+    if (packageCost === undefined && amountPaid === undefined && discount === undefined) {
+      return res.status(400).json({
+        message: 'At least one field (packageCost, amountPaid, discount) is required to update billing',
+      });
+    }
+
+    billing.packageCost = packageCost !== undefined ? packageCost : billing.packageCost;
+    billing.amountPaid = amountPaid !== undefined ? amountPaid : billing.amountPaid;
+    billing.discount = discount !== undefined ? discount : billing.discount;
+    billing.balance = billing.packageCost - billing.discount - billing.amountPaid;
+
+    await billing.save();
+
+    res.json({
+      message: 'Billing updated successfully',
+      billing,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -177,3 +557,167 @@ exports.deleteBilling = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+/**
+ * GET Payment History by Billing ID
+ * GET /api/billing/:id/payment-history
+ */
+exports.getPaymentHistoryByBillingId = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const billing = await Billing.findByPk(id);
+    if (!billing) {
+      return res.status(404).json({ message: 'Billing not found' });
+    }
+
+    const history = await BillingPaymentHistory.findAll({
+      where: { billingId: id },
+      order: [['createdAt', 'ASC']],
+    });
+
+    // Calculate balance at time and cumulative paid for each payment
+    const totalCost = parseFloat(billing.packageCost) - parseFloat(billing.discount || 0);
+    let remainingBalance = totalCost;
+    let cumulativePaid = 0;
+
+    const enhancedHistory = history.map(payment => {
+      const paymentAmount = parseFloat(payment.amountPaid);
+
+      const balanceAtTime = parseFloat(remainingBalance.toFixed(2));
+      remainingBalance = parseFloat((remainingBalance - paymentAmount).toFixed(2));
+
+      cumulativePaid = parseFloat((cumulativePaid + paymentAmount).toFixed(2));
+
+      return {
+        id: payment.id,
+        billingId: payment.billingId,
+        amountPaid: paymentAmount,
+        paymentMode: payment.paymentMode,
+        transaction_id: payment.transaction_id,
+        denomination: payment.denomination,
+        posReceiptUrl: payment.posReceiptUrl,
+        balanceAtTime,
+        balanceAfterPayment: remainingBalance,
+        totalPaidSoFar: cumulativePaid,
+        createdAt: payment.createdAt,
+        updatedAt: payment.updatedAt,
+      };
+    });
+
+    return res.status(200).json({
+      billingId: parseInt(id),
+      totalCost: totalCost,
+      currentBalance: parseFloat(billing.balance),
+      paymentHistory: enhancedHistory,
+    });
+  } catch (error) {
+    console.error('Get Payment History Error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+/**
+ * SAVE Payment History Record
+ * POST /api/billings/:id/payment-history
+ */
+exports.savePaymentHistoryByBillingId = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      amountPaid,
+      paymentMode,
+      transaction_id,
+      denomination,
+      posReceiptUrl,
+    } = req.body;
+
+    // Validate billing exists
+    const billing = await Billing.findByPk(id);
+    if (!billing) {
+      return res.status(404).json({ message: 'Billing not found' });
+    }
+
+    // Validate amountPaid is provided and is a valid number
+    if (amountPaid === undefined || amountPaid === null) {
+      return res.status(400).json({ message: 'amountPaid is required' });
+    }
+
+    const paymentAmount = parseFloat(amountPaid);
+    if (isNaN(paymentAmount) || paymentAmount <= 0) {
+      return res.status(400).json({ message: 'amountPaid must be a positive number' });
+    }
+
+    // Create payment history record
+    const paymentHistory = await BillingPaymentHistory.create({
+      billingId: id,
+      amountPaid: paymentAmount,
+      paymentMode: paymentMode || null,
+      transaction_id: transaction_id || null,
+      denomination: denomination || null,
+      posReceiptUrl: posReceiptUrl || null,
+    });
+
+    // Recalculate billing balance based on all payment histories
+    const allPayments = await BillingPaymentHistory.findAll({ where: { billingId: id } });
+    const newAmountPaid = allPayments.reduce((sum, p) => sum + parseFloat(p.amountPaid), 0);
+    const newBalance = parseFloat((parseFloat(billing.packageCost) - parseFloat(billing.discount || 0) - newAmountPaid).toFixed(2));
+
+    await billing.update({
+      amountPaid: parseFloat(newAmountPaid.toFixed(2)),
+      balance: newBalance,
+    });
+
+    return res.status(201).json({
+      message: 'Payment recorded successfully',
+      paymentHistory,
+      billing: {
+        id: billing.id,
+        enquiryId: billing.enquiryId,
+        packageCost: billing.packageCost,
+        amountPaid: newAmountPaid,
+        balance: newBalance,
+      },
+    });
+  } catch (error) {
+    console.error('Save Payment History Error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+/**
+ * Upload POS receipt
+ */
+exports.uploadReceipt = async (req, res) => {
+  const form = new Formidable({ multiples: false, maxFileSize: 50 * 1024 * 1024, keepExtensions: true });
+
+  try {
+    const [fields, files] = await form.parse(req);
+    const uploadedFile = files.posReceipt ? files.posReceipt[0] : null;
+
+    if (!uploadedFile) {
+      return res.status(400).json({ success: false, message: 'POS Receipt file is required' });
+    }
+
+    const fileBuffer = await fs.readFile(uploadedFile.filepath);
+    const uniqueName = `pos-receipt-${Date.now()}`;
+
+    let posReceiptUrl = null;
+    try {
+      const uploadResult = await uploadImage(fileBuffer, uniqueName);
+      posReceiptUrl = uploadResult.secure_url;
+    } catch (uploadError) {
+      console.error('Cloudinary upload error:', uploadError);
+      return res.status(400).json({ message: 'Failed to upload receipt', error: uploadError.message });
+    } finally {
+      await fs.unlink(uploadedFile.filepath).catch(() => {});
+    }
+
+    res.status(200).json({ success: true, url: posReceiptUrl });
+  } catch (error) {
+    console.error('Error uploading receipt:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+

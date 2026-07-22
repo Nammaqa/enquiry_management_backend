@@ -11,9 +11,11 @@ exports.uploadImage = async (fileBuffer, fileName) => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
-        resource_type: 'auto',
+        resource_type: 'image',
         public_id: fileName,
         folder: 'enquiry_system',
+        overwrite: true,
+        quality: 'auto',
       },
       (error, result) => {
         if (error) {
@@ -69,7 +71,7 @@ exports.uploadDocument = async (fileBuffer, fileName) => {
         resource_type: 'auto',
         public_id: fileName,
         folder: 'enquiry_system/documents',
-        type: 'authenticated',
+        overwrite: true,
       },
       (error, result) => {
         if (error) {
@@ -88,7 +90,7 @@ exports.uploadDocument = async (fileBuffer, fileName) => {
 exports.deleteDocument = async (publicId) => {
   try {
     const result = await cloudinary.uploader.destroy(publicId, {
-      resource_type: 'auto',
+      resource_type: 'image',
     });
     return result;
   } catch (error) {

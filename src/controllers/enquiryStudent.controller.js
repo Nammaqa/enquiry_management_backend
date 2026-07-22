@@ -13,6 +13,16 @@ const Material = db.Material;
 const MockInterview = db.MockInterview;
 const sequelize = db.sequelize;
 
+const validateAlphabetsOnly = (value, fieldName) => {
+  if (!value) return null;
+  // Allow letters, numbers, spaces and common punctuation; reject control chars
+  const regex = /^[^\x00-\x1F]+$/;
+  if (!regex.test(value.trim())) {
+    return `${fieldName} contains invalid characters`;
+  }
+  return null;
+};
+
 /**
  * ENQUIRY STUDENT SIGNUP
  * Public route — any student can self-register
@@ -34,10 +44,16 @@ exports.enquiryStudentSignup = async (req, res) => {
       return res.status(400).json({ message: 'Name, email, phone, and password are required' });
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    // Validate email format and domain
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ message: 'Invalid email format' });
+    }
+
+    const invalidDomains = ['test.com', 'example.com', 'dummy.com', 'fake.com', 'invalid.com', 'email.com'];
+    const emailDomain = email.split('@')[1]?.toLowerCase();
+    if (invalidDomains.includes(emailDomain)) {
+      return res.status(400).json({ message: 'Please provide a genuine email address' });
     }
 
     // Validate phone (at least 10 digits)
@@ -79,7 +95,7 @@ exports.enquiryStudentSignup = async (req, res) => {
       phone: phoneDigits,
       password: hashedPassword,
       candidateStatus: 'enquiry stage',
-      globalUser: true,
+      global: true,
       passwordChanged: true,
     });
 
@@ -610,6 +626,11 @@ exports.updateStudentProfile = async (req, res) => {
       qualification,
       experience
     } = req.body;
+
+    const locationError = validateAlphabetsOnly(current_location, 'Current location');
+    if (locationError) {
+      return res.status(400).json({ message: locationError });
+    }
 
     const updateData = {};
     if (name !== undefined) updateData.name = name.trim();
