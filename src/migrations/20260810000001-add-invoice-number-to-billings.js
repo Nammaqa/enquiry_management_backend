@@ -19,6 +19,8 @@ module.exports = {
       });
     }
 
+    
+
     const [billings] = await queryInterface.sequelize.query(
       'SELECT id, "createdAt" FROM billings ORDER BY id ASC'
     );
