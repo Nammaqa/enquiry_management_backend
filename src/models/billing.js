@@ -1,3 +1,8 @@
+const formatInvoiceNumber = (id, createdAt = new Date()) => {
+  const year = new Date(createdAt).getFullYear();
+  return `NQA-${year}${String(id).padStart(6, '0')}`;
+};
+
 module.exports = (sequelize, DataTypes) => {
   return sequelize.define(
     'Billing',
@@ -48,6 +53,12 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 0,
       },
+      invoiceNumber: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        comment: 'Unique invoice number generated for each billing',
+      },
       transaction_id: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -74,6 +85,21 @@ module.exports = (sequelize, DataTypes) => {
       tableName: 'billings',
       freezeTableName: true,
       timestamps: true,
+      hooks: {
+        beforeCreate: (billing) => {
+          if (!billing.invoiceNumber || !billing.invoiceNumber.trim()) {
+            billing.invoiceNumber = formatInvoiceNumber(0, billing.createdAt || new Date());
+          }
+        },
+        afterCreate: async (billing) => {
+          if (billing.invoiceNumber !== formatInvoiceNumber(0, billing.createdAt || new Date())) {
+            return;
+          }
+
+          const generatedInvoiceNumber = formatInvoiceNumber(billing.id, billing.createdAt || new Date());
+          await billing.update({ invoiceNumber: generatedInvoiceNumber }, { hooks: false });
+        },
+      },
     }
   );
 };
