@@ -122,7 +122,7 @@ exports.createOrUpdateBilling = async (req, res) => {
         });
       }
 
-      billing = await Billing.create({
+      const billingPayload = {
         enquiryId,
         packageCost: resolvedPackageCost,
         amountPaid: finalAmountPaid,
@@ -132,8 +132,13 @@ exports.createOrUpdateBilling = async (req, res) => {
         balance: parseFloat(balance.toFixed(2)),
         packageType: 'package',
         transaction_id,
-        invoiceNumber: validInvoiceNumber,
-      });
+      };
+
+      if (validInvoiceNumber !== undefined) {
+        billingPayload.invoiceNumber = validInvoiceNumber;
+      }
+
+      billing = await Billing.create(billingPayload);
 
       if (finalAmountPaid > 0) {
         await BillingPaymentHistory.create({
@@ -218,7 +223,7 @@ exports.createOrUpdateBilling = async (req, res) => {
           billing,
         });
       } else {
-        billing = await Billing.create({
+        const billingPayload = {
           enquiryId,
           packageCost: parseFloat(totalPackageCost.toFixed(2)),
           amountPaid: parseFloat(totalAmountPaid.toFixed(2)),
@@ -230,8 +235,13 @@ exports.createOrUpdateBilling = async (req, res) => {
           transaction_id,
           subjectIds: subjectIds,
           subjectWiseBreakdown: breakdown,
-          invoiceNumber: validInvoiceNumber,
-        });
+        };
+
+        if (validInvoiceNumber !== undefined) {
+          billingPayload.invoiceNumber = validInvoiceNumber;
+        }
+
+        billing = await Billing.create(billingPayload);
 
         return res.status(201).json({
           message: 'Billing created successfully',
@@ -553,6 +563,7 @@ exports.updateBilling = async (req, res) => {
     billing.amountPaid = amountPaid !== undefined ? amountPaid : billing.amountPaid;
     billing.discount = discount !== undefined ? discount : billing.discount;
     billing.balance = billing.packageCost - billing.discount - billing.amountPaid;
+    billing.invoiceNumber = billing.invoiceNumber || formatInvoiceNumber(billing.id, billing.createdAt || new Date());
 
     await billing.save();
 

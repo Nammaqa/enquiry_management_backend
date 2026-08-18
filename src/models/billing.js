@@ -86,6 +86,19 @@ module.exports = (sequelize, DataTypes) => {
       freezeTableName: true,
       timestamps: true,
       hooks: {
+        beforeValidate: (billing) => {
+          const currentInvoiceNumber = billing.invoiceNumber;
+
+          if (currentInvoiceNumber === undefined || currentInvoiceNumber === null || !String(currentInvoiceNumber).trim()) {
+            billing.invoiceNumber = formatInvoiceNumber(billing.id || 0, billing.createdAt || new Date());
+            return;
+          }
+
+          const trimmedInvoiceNumber = String(currentInvoiceNumber).trim();
+          if (trimmedInvoiceNumber !== currentInvoiceNumber) {
+            billing.invoiceNumber = trimmedInvoiceNumber;
+          }
+        },
         beforeCreate: (billing) => {
           if (!billing.invoiceNumber || !billing.invoiceNumber.trim()) {
             billing.invoiceNumber = formatInvoiceNumber(0, billing.createdAt || new Date());
