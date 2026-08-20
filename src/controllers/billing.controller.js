@@ -3,6 +3,22 @@ const { Formidable } = require('formidable');
 const fs = require('fs').promises;
 const { uploadImage } = require('../utils/cloudinary');
 
+const INVOICE_NUMBER_PATTERN = /^NQA-\d{10}$/;
+
+const formatInvoiceNumber = (id, createdAt = new Date()) => {
+  const year = new Date(createdAt).getFullYear();
+  return `NQA-${year}${String(id).padStart(6, '0')}`;
+};
+
+const getValidInvoiceNumber = (invoiceNumber) => {
+  if (invoiceNumber === undefined || invoiceNumber === null || invoiceNumber === '') {
+    return undefined;
+  }
+
+  const trimmedInvoiceNumber = String(invoiceNumber).trim();
+  return INVOICE_NUMBER_PATTERN.test(trimmedInvoiceNumber) ? trimmedInvoiceNumber : null;
+};
+
 /**
  * CREATE or UPDATE Billing (COMBINED API - Package or Individual Subjects)
  */
@@ -19,7 +35,13 @@ exports.createOrUpdateBilling = async (req, res) => {
       paymentMode,
       denomination,
       posReceiptUrl,
+      invoiceNumber,
     } = req.body;
+
+    const validInvoiceNumber = getValidInvoiceNumber(invoiceNumber);
+    if (validInvoiceNumber === null) {
+      return res.status(400).json({ message: 'Invoice number must use format NQA-YYYY000001' });
+    }
 
     let packageType = req.body.packageType;
     if (typeof packageType !== 'string' || !packageType.trim()) {
@@ -100,7 +122,7 @@ exports.createOrUpdateBilling = async (req, res) => {
         });
       }
 
-      billing = await Billing.create({
+      const billingPayload = {
         enquiryId,
         packageCost: resolvedPackageCost,
         amountPaid: finalAmountPaid,
@@ -110,7 +132,13 @@ exports.createOrUpdateBilling = async (req, res) => {
         balance: parseFloat(balance.toFixed(2)),
         packageType: 'package',
         transaction_id,
-      });
+      };
+
+      if (validInvoiceNumber !== undefined) {
+        billingPayload.invoiceNumber = validInvoiceNumber;
+      }
+
+      billing = await Billing.create(billingPayload);
 
       if (finalAmountPaid > 0) {
         await BillingPaymentHistory.create({
@@ -195,7 +223,7 @@ exports.createOrUpdateBilling = async (req, res) => {
           billing,
         });
       } else {
-        billing = await Billing.create({
+        const billingPayload = {
           enquiryId,
           packageCost: parseFloat(totalPackageCost.toFixed(2)),
           amountPaid: parseFloat(totalAmountPaid.toFixed(2)),
@@ -207,7 +235,13 @@ exports.createOrUpdateBilling = async (req, res) => {
           transaction_id,
           subjectIds: subjectIds,
           subjectWiseBreakdown: breakdown,
-        });
+        };
+
+        if (validInvoiceNumber !== undefined) {
+          billingPayload.invoiceNumber = validInvoiceNumber;
+        }
+
+        billing = await Billing.create(billingPayload);
 
         return res.status(201).json({
           message: 'Billing created successfully',
@@ -233,6 +267,7 @@ exports.createOrUpdateBilling = async (req, res) => {
 exports.getBillingByEnquiryId = async (req, res) => {
   try {
     const { enquiryId } = req.params;
+    res.set('Cache-Control', 'no-store');
 
     // Check if enquiry exists
     const enquiry = await Enquiry.findByPk(enquiryId);
@@ -257,9 +292,13 @@ exports.getBillingByEnquiryId = async (req, res) => {
     });
 
     if (!billing) {
+      const maxBillingId = await Billing.max('id');
+      const nextInvoiceNumber = formatInvoiceNumber((maxBillingId || 0) + 1);
+
       return res.status(200).json({
         id: null,
         enquiryId,
+        invoiceNumber: nextInvoiceNumber,
         packageCost: 0,
         amountPaid: 0,
         discount: 0,
@@ -281,7 +320,10 @@ exports.getBillingByEnquiryId = async (req, res) => {
       });
     }
 
-    res.json(billing);
+    const billingData = billing.toJSON();
+    billingData.invoiceNumber = billingData.invoiceNumber || formatInvoiceNumber(billing.id, billing.createdAt);
+
+    res.json(billingData);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -521,6 +563,7 @@ exports.updateBilling = async (req, res) => {
     billing.amountPaid = amountPaid !== undefined ? amountPaid : billing.amountPaid;
     billing.discount = discount !== undefined ? discount : billing.discount;
     billing.balance = billing.packageCost - billing.discount - billing.amountPaid;
+    billing.invoiceNumber = billing.invoiceNumber || formatInvoiceNumber(billing.id, billing.createdAt || new Date());
 
     await billing.save();
 
@@ -592,6 +635,7 @@ exports.getPaymentHistoryByBillingId = async (req, res) => {
       return {
         id: payment.id,
         billingId: payment.billingId,
+        invoiceNumber: payment.invoiceNumber || formatInvoiceNumber(payment.id, payment.createdAt),
         amountPaid: paymentAmount,
         paymentMode: payment.paymentMode,
         transaction_id: payment.transaction_id,
@@ -607,6 +651,7 @@ exports.getPaymentHistoryByBillingId = async (req, res) => {
 
     return res.status(200).json({
       billingId: parseInt(id),
+      invoiceNumber: billing.invoiceNumber,
       totalCost: totalCost,
       currentBalance: parseFloat(billing.balance),
       paymentHistory: enhancedHistory,
@@ -674,6 +719,7 @@ exports.savePaymentHistoryByBillingId = async (req, res) => {
       billing: {
         id: billing.id,
         enquiryId: billing.enquiryId,
+        invoiceNumber: billing.invoiceNumber,
         packageCost: billing.packageCost,
         amountPaid: newAmountPaid,
         balance: newBalance,

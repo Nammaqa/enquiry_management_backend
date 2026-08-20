@@ -4,6 +4,25 @@
     "NODE_ENV": "production"
   },
   "buildCommand": "npm install",
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "*"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",
