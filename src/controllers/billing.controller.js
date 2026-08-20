@@ -19,6 +19,45 @@ const getValidInvoiceNumber = (invoiceNumber) => {
   return INVOICE_NUMBER_PATTERN.test(trimmedInvoiceNumber) ? trimmedInvoiceNumber : null;
 };
 
+const toMoney = (value) => {
+  const parsed = parseFloat(value);
+  return Number.isNaN(parsed) ? 0 : parseFloat(parsed.toFixed(2));
+};
+
+const sameSubjectSelection = (left = [], right = []) => {
+  const normalize = (value) => [...new Set((Array.isArray(value) ? value : [value]).filter(Boolean).map(Number))].sort((a, b) => a - b);
+  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
+};
+
+const sameSubjectPayments = (existingBreakdown = [], newBreakdown = []) => {
+  if (!Array.isArray(existingBreakdown) || existingBreakdown.length !== newBreakdown.length) {
+    return false;
+  }
+
+  return newBreakdown.every((subject) => {
+    const existing = existingBreakdown.find((item) => Number(item.subjectId) === Number(subject.subjectId));
+    return existing && toMoney(existing.paid) === toMoney(subject.paid);
+  });
+};
+
+const sameOptionalValue = (left, right) => (left || null) === (right || null);
+
+const isSameImmediatePayment = (payment, payload) => {
+  if (!payment) {
+    return false;
+  }
+
+  const createdAt = new Date(payment.createdAt).getTime();
+  const isRecent = Number.isFinite(createdAt) && Date.now() - createdAt < 30000;
+
+  return isRecent &&
+    toMoney(payment.amountPaid) === toMoney(payload.amountPaid) &&
+    sameOptionalValue(payment.paymentMode, payload.paymentMode) &&
+    sameOptionalValue(payment.transaction_id, payload.transaction_id) &&
+    sameOptionalValue(payment.denomination, payload.denomination) &&
+    sameOptionalValue(payment.posReceiptUrl, payload.posReceiptUrl);
+};
+
 /**
  * CREATE or UPDATE Billing (COMBINED API - Package or Individual Subjects)
  */
@@ -36,6 +75,7 @@ exports.createOrUpdateBilling = async (req, res) => {
       denomination,
       posReceiptUrl,
       invoiceNumber,
+      subjectPayments = [],
     } = req.body;
 
     const validInvoiceNumber = getValidInvoiceNumber(invoiceNumber);
@@ -174,7 +214,8 @@ exports.createOrUpdateBilling = async (req, res) => {
 
       // Build subject-wise breakdown
       const breakdown = subjects.map(subject => {
-        const subjectPayment = subjectPayments.find(p => p.subjectId === subject.id) || {};
+        const normalizedSubjectPayments = Array.isArray(subjectPayments) ? subjectPayments : [];
+        const subjectPayment = normalizedSubjectPayments.find(p => Number(p.subjectId) === Number(subject.id)) || {};
         const fee = parseFloat(subject.fees) || 0;
         const paid = parseFloat(subjectPayment.amountPaid) || 0;
         const subBalance = fee - paid;
@@ -200,6 +241,19 @@ exports.createOrUpdateBilling = async (req, res) => {
       const balance = totalCost - totalAmountPaid;
 
       if (billing) {
+        const isDuplicateFirstSubjectPayment =
+          billing.packageType === 'individual' &&
+          toMoney(billing.amountPaid) === toMoney(totalAmountPaid) &&
+          sameSubjectSelection(billing.subjectIds, subjectIds) &&
+          sameSubjectPayments(billing.subjectWiseBreakdown, breakdown);
+
+        if (isDuplicateFirstSubjectPayment) {
+          return res.status(200).json({
+            message: 'Billing already recorded successfully',
+            billing,
+          });
+        }
+
         // ACCUMULATE the new payment with existing amount paid
         const newTotalAmountPaidIndividual = parseFloat((parseFloat(billing.amountPaid) + parseFloat(totalAmountPaid)).toFixed(2));
         const newBalanceIndividual = parseFloat((totalCost - newTotalAmountPaidIndividual).toFixed(2));
@@ -693,15 +747,37 @@ exports.savePaymentHistoryByBillingId = async (req, res) => {
       return res.status(400).json({ message: 'amountPaid must be a positive number' });
     }
 
-    // Create payment history record
-    const paymentHistory = await BillingPaymentHistory.create({
+    const paymentPayload = {
       billingId: id,
       amountPaid: paymentAmount,
       paymentMode: paymentMode || null,
       transaction_id: transaction_id || null,
       denomination: denomination || null,
       posReceiptUrl: posReceiptUrl || null,
+    };
+
+    const latestPayment = await BillingPaymentHistory.findOne({
+      where: { billingId: id },
+      order: [['createdAt', 'DESC']],
     });
+
+    if (isSameImmediatePayment(latestPayment, paymentPayload)) {
+      return res.status(200).json({
+        message: 'Payment already recorded successfully',
+        paymentHistory: latestPayment,
+        billing: {
+          id: billing.id,
+          enquiryId: billing.enquiryId,
+          invoiceNumber: billing.invoiceNumber,
+          packageCost: billing.packageCost,
+          amountPaid: billing.amountPaid,
+          balance: billing.balance,
+        },
+      });
+    }
+
+    // Create payment history record
+    const paymentHistory = await BillingPaymentHistory.create(paymentPayload);
 
     // Recalculate billing balance based on all payment histories
     const allPayments = await BillingPaymentHistory.findAll({ where: { billingId: id } });
