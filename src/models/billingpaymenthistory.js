@@ -46,6 +46,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         comment: 'Cash denomination e.g. 500x2',
       },
+      posReceiptUrl: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Uploaded POS receipt URL',
+      },
     },
     {
       tableName: 'billing_payment_history',
