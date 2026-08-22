@@ -24,6 +24,83 @@ const toMoney = (value) => {
   return Number.isNaN(parsed) ? 0 : parseFloat(parsed.toFixed(2));
 };
 
+const toOptionalMoney = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const parsed = parseFloat(value);
+  return Number.isNaN(parsed) ? undefined : parseFloat(parsed.toFixed(2));
+};
+
+const getAmountFromValue = (value) => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== 'object') {
+    return toOptionalMoney(value);
+  }
+
+  return toOptionalMoney(
+    value.fee ??
+    value.fees ??
+    value.amount ??
+    value.cost ??
+    value.packageCost ??
+    value.value
+  );
+};
+
+const getTargetedSubjectFee = (targetedFees, subjectId) => {
+  if (!targetedFees) {
+    return undefined;
+  }
+
+  const candidates = targetedFees.subjects || targetedFees.subjectFees || targetedFees;
+
+  if (Array.isArray(candidates)) {
+    const match = candidates.find((item) => Number(item.subjectId ?? item.id) === Number(subjectId));
+    return getAmountFromValue(match);
+  }
+
+  if (typeof candidates === 'object') {
+    return getAmountFromValue(candidates[subjectId] ?? candidates[String(subjectId)]);
+  }
+
+  return undefined;
+};
+
+const getTargetedPackageFee = (targetedFees) => {
+  if (!targetedFees) {
+    return undefined;
+  }
+
+  return getAmountFromValue(
+    targetedFees.package ??
+    targetedFees.packageFee ??
+    targetedFees.packageCost ??
+    targetedFees.total ??
+    targetedFees.totalFees
+  );
+};
+
+const getDraftPackageCost = (enquiry) => {
+  const selectedSubjectIds = Array.isArray(enquiry.subjectIds) ? enquiry.subjectIds : [];
+
+  if (selectedSubjectIds.length > 0) {
+    const subjectTotal = selectedSubjectIds.reduce((sum, subjectId) => {
+      return sum + toMoney(getTargetedSubjectFee(enquiry.targetedFees, subjectId));
+    }, 0);
+
+    if (subjectTotal > 0) {
+      return parseFloat(subjectTotal.toFixed(2));
+    }
+  }
+
+  return getTargetedPackageFee(enquiry.targetedFees) || 0;
+};
+
 const sameSubjectSelection = (left = [], right = []) => {
   const normalize = (value) => [...new Set((Array.isArray(value) ? value : [value]).filter(Boolean).map(Number))].sort((a, b) => a - b);
   return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
@@ -105,22 +182,24 @@ exports.createOrUpdateBilling = async (req, res) => {
 
     // CASE 1: Package-based billing
     if (packageType === 'package') {
-      const finalDiscount = discount || 0;
-      const gstPercentage = gst || 0;
-      const currentPackageCost = billing ? parseFloat(billing.packageCost) : undefined;
-      const resolvedPackageCost = packageCost !== undefined
-        ? parseFloat(packageCost)
+      const finalDiscount = toMoney(discount);
+      const gstPercentage = toMoney(gst);
+      const currentPackageCost = billing ? toOptionalMoney(billing.packageCost) : undefined;
+      const requestedPackageCost = toOptionalMoney(packageCost);
+      const requestedAmountPaid = toOptionalMoney(amountPaid);
+      const resolvedPackageCost = requestedPackageCost !== undefined
+        ? requestedPackageCost
         : currentPackageCost !== undefined
           ? currentPackageCost
-          : amountPaid !== undefined
-            ? parseFloat(amountPaid)
+          : requestedAmountPaid !== undefined
+            ? requestedAmountPaid
             : undefined;
 
       if (resolvedPackageCost === undefined) {
         return res.status(400).json({ message: 'Package cost is required for a new billing record' });
       }
 
-      const finalAmountPaid = amountPaid !== undefined ? parseFloat(amountPaid) : 0;
+      const finalAmountPaid = requestedAmountPaid !== undefined ? requestedAmountPaid : 0;
       const costAfterDiscount = resolvedPackageCost - finalDiscount;
       const gstAmount = costAfterDiscount * (gstPercentage / 100);
       const totalCost = costAfterDiscount;
@@ -203,6 +282,9 @@ exports.createOrUpdateBilling = async (req, res) => {
         return res.status(400).json({ message: 'Subject IDs are required for individual billing' });
       }
 
+      const normalizedSubjectPayments = Array.isArray(subjectPayments) ? subjectPayments : [];
+      const requestedPackageCost = toOptionalMoney(packageCost);
+
       // Fetch all subjects to get their fees
       const subjects = await Subject.findAll({
         where: { id: subjectIds }
@@ -214,10 +296,12 @@ exports.createOrUpdateBilling = async (req, res) => {
 
       // Build subject-wise breakdown
       const breakdown = subjects.map(subject => {
-        const normalizedSubjectPayments = Array.isArray(subjectPayments) ? subjectPayments : [];
         const subjectPayment = normalizedSubjectPayments.find(p => Number(p.subjectId) === Number(subject.id)) || {};
-        const fee = parseFloat(subject.fees) || 0;
-        const paid = parseFloat(subjectPayment.amountPaid) || 0;
+        const fee = getAmountFromValue(subjectPayment) ??
+          getTargetedSubjectFee(enquiry.targetedFees, subject.id) ??
+          (subjects.length === 1 ? requestedPackageCost : undefined) ??
+          toMoney(subject.fees);
+        const paid = toMoney(subjectPayment.amountPaid);
         const subBalance = fee - paid;
 
         return {
@@ -232,8 +316,8 @@ exports.createOrUpdateBilling = async (req, res) => {
       // Calculate totals
       const totalPackageCost = breakdown.reduce((sum, b) => sum + b.fee, 0);
       const totalAmountPaid = breakdown.reduce((sum, b) => sum + b.paid, 0);
-      const finalDiscount = discount || 0;
-      const gstPercentage = gst || 0;
+      const finalDiscount = toMoney(discount);
+      const gstPercentage = toMoney(gst);
 
       const costAfterDiscount = totalPackageCost - finalDiscount;
       const gstAmount = costAfterDiscount * (gstPercentage / 100);
@@ -348,17 +432,18 @@ exports.getBillingByEnquiryId = async (req, res) => {
     if (!billing) {
       const maxBillingId = await Billing.max('id');
       const nextInvoiceNumber = formatInvoiceNumber((maxBillingId || 0) + 1);
+      const draftPackageCost = getDraftPackageCost(enquiry);
 
       return res.status(200).json({
         id: null,
         enquiryId,
         invoiceNumber: nextInvoiceNumber,
-        packageCost: 0,
+        packageCost: draftPackageCost,
         amountPaid: 0,
         discount: 0,
         gst: 0,
         gstAmount: 0,
-        balance: 0,
+        balance: draftPackageCost,
         packageType: 'package',
         transaction_id: null,
         subjectIds: [],
