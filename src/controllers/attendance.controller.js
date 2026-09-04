@@ -1,8 +1,28 @@
 const db = require('../models');
-const { Attendance, Enquiry, Subject, Batch, User } = db;
+const { Attendance, Enquiry, Subject, Batch, User, BatchStudent } = db;
 const { Op } = require('sequelize');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
+
+// Haversine formula to calculate distance between two points in meters
+function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
+    var R = 6371000; // Radius of the earth in m
+    var dLat = deg2rad(lat2 - lat1);
+    var dLon = deg2rad(lon2 - lon1);
+    var a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        ;
+    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    var d = R * c; // Distance in m
+    return d;
+}
+
+function deg2rad(deg) {
+    return deg * (Math.PI / 180);
+}
+
 
 // Generate QR Code Session (Instructor)
 exports.generateQrSession = async (req, res) => {
@@ -60,20 +80,72 @@ exports.generateQrSession = async (req, res) => {
     }
 };
 
+// Generate Offline QR (Instructor / Admin)
+exports.generateOfflineQr = async (req, res) => {
+    try {
+        const { batchId, latitude, longitude } = req.body;
+        const instructorId = req.user.userId;
+        const role = req.user.role;
+
+        if (!batchId || !latitude || !longitude) {
+            return res.status(400).json({ success: false, message: 'batchId, latitude, and longitude are required' });
+        }
+
+        const batch = await Batch.findByPk(batchId);
+        if (!batch) {
+            return res.status(404).json({ success: false, message: 'Batch not found' });
+        }
+
+        if (String(batch.instructorId) !== String(instructorId) && String(batch.createdBy) !== String(instructorId) && role !== 'ADMIN' && role !== 'COUNSELLOR') {
+            return res.status(403).json({ success: false, message: 'Not authorized for this batch' });
+        }
+
+        const offlineQrId = crypto.randomBytes(16).toString('hex');
+        const qrData = {
+            batchId,
+            offlineQrId,
+            type: 'offline'
+        };
+
+        const qrCode = await QRCode.toDataURL(JSON.stringify(qrData));
+
+        batch.latitude = latitude;
+        batch.longitude = longitude;
+        batch.offlineQr = JSON.stringify(qrData);
+        await batch.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Offline QR generated and location set',
+            data: {
+                qrCode,
+                latitude,
+                longitude
+            }
+        });
+    } catch (error) {
+        console.error('Error generating offline QR:', error);
+        res.status(500).json({ success: false, message: 'Failed to generate offline QR', error: error.message });
+    }
+};
+
 // Mark Attendance (Student)
 exports.markAttendance = async (req, res) => {
     try {
-        const { qrSessionId } = req.body;
+        const { qrSessionId, latitude, longitude } = req.body;
         const enquiryId = req.enquiry.enquiryId;
 
         if (!qrSessionId) {
             return res.status(400).json({ success: false, message: 'qrSessionId is required' });
         }
 
-        // Find batch with this sessionQr
+        // Find batch with this sessionQr or offlineQr
         const batches = await Batch.findAll({
             where: {
-                sessionQr: { [Op.like]: `%${qrSessionId}%` }
+                [Op.or]: [
+                    { sessionQr: { [Op.like]: `%${qrSessionId}%` } },
+                    { offlineQr: { [Op.like]: `%${qrSessionId}%` } }
+                ]
             }
         });
 
@@ -83,19 +155,31 @@ exports.markAttendance = async (req, res) => {
 
         const batch = batches[0];
         let sessionData;
+        let isOfflineMode = false;
         try {
-            sessionData = JSON.parse(batch.sessionQr);
+            if (batch.offlineQr && batch.offlineQr.includes(qrSessionId)) {
+                sessionData = JSON.parse(batch.offlineQr);
+                isOfflineMode = true;
+            } else {
+                sessionData = JSON.parse(batch.sessionQr);
+            }
         } catch (e) {
             return res.status(500).json({ success: false, message: 'Failed to parse session data' });
         }
 
-        if (sessionData.qrSessionId !== qrSessionId) {
-            return res.status(400).json({ success: false, message: 'Invalid QR session data' });
-        }
+        if (!isOfflineMode) {
+            if (sessionData.qrSessionId !== qrSessionId) {
+                return res.status(400).json({ success: false, message: 'Invalid QR session data' });
+            }
 
-        // Check expiration
-        if (new Date() > new Date(batch.sessionEndDate)) {
-            return res.status(400).json({ success: false, message: 'QR session has expired' });
+            // Check expiration for online
+            if (new Date() > new Date(batch.sessionEndDate)) {
+                return res.status(400).json({ success: false, message: 'QR session has expired' });
+            }
+        } else {
+            if (sessionData.offlineQrId !== qrSessionId) {
+                return res.status(400).json({ success: false, message: 'Invalid Offline QR session data' });
+            }
         }
 
         // Check if student belongs to batch
@@ -115,6 +199,31 @@ exports.markAttendance = async (req, res) => {
 
         if (!isEnrolled) {
             return res.status(403).json({ success: false, message: 'You are not enrolled in this batch' });
+        }
+
+        // Check mode and location
+        const batchStudent = await BatchStudent.findOne({ where: { batchId: batch.id, enquiryId } });
+        const studentMode = batchStudent ? batchStudent.mode : 'online';
+
+        if (isOfflineMode) {
+            // Student is scanning offline QR
+            if (studentMode !== 'offline') {
+                return res.status(403).json({ success: false, message: 'You are not registered for offline classes.' });
+            }
+
+            if (!latitude || !longitude) {
+                return res.status(400).json({ success: false, message: 'Location (latitude, longitude) is required for offline attendance.' });
+            }
+
+            const distance = getDistanceFromLatLonInM(latitude, longitude, batch.latitude, batch.longitude);
+            if (distance > 10) {
+                return res.status(403).json({ success: false, message: `You are too far from the center to mark attendance (${Math.round(distance)} meters away, maximum allowed is 10 meters).` });
+            }
+        } else {
+            // Student is scanning online QR
+            if (studentMode !== 'online') {
+                return res.status(403).json({ success: false, message: 'You are registered for offline classes. Please scan the center QR code.' });
+            }
         }
 
         // Check existing attendance

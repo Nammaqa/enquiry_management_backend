@@ -523,6 +523,8 @@ exports.addStudentstoBatch = async (req, res) => {
       });
     }
 
+    const mode = req.body.mode || 'online'; // Default to online if not specified
+
     const batch = await db.Batch.findByPk(batchId);
     if (!batch) {
       return res.status(404).json({ message: 'Batch not found' });
@@ -549,10 +551,16 @@ exports.addStudentstoBatch = async (req, res) => {
 
       if (existingEntry) {
         existingStudents.push(enquiryId);
+        // Optional: update mode if they were already in the batch
+        if (existingEntry.mode !== mode) {
+            existingEntry.mode = mode;
+            await existingEntry.save();
+        }
       } else {
         await db.BatchStudent.create({
           batchId,
           enquiryId,
+          mode,
         });
         addedStudents.push(enquiryId);
       }
