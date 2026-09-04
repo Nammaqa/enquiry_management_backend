@@ -14,6 +14,11 @@ module.exports = (sequelize, DataTypes) => {
         references: { model: 'enquiries', key: 'id' },
         onDelete: 'CASCADE',
       },
+      mode: {
+        type: DataTypes.ENUM('online', 'offline'),
+        allowNull: true,
+        defaultValue: 'online',
+      }
     },
     {
       tableName: 'batchstudents',
