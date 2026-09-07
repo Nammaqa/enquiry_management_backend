@@ -13,3 +13,4 @@ router.delete('/:id', auth, controller.deleteSubject);
 
 module.exports = router;
 
+
