@@ -1,4 +1,4 @@
-const { User } = require('../models');
+const { User, OTP } = require('../models');
 const { comparePassword } = require('../utils/password');
 const { signToken } = require('../config/jwt');
 
@@ -15,10 +15,10 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const isValid = await comparePassword(password, user.password);
-    if (!isValid) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
+      const isValid = await comparePassword(password, user.password);
+      if (!isValid) {
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
 
     const token = await signToken({
       userId: user.id,
@@ -35,7 +35,8 @@ exports.login = async (req, res) => {
       role: user.role,
     });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error' });
+    console.error('Login error:', error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 

@@ -12,7 +12,10 @@ module.exports = (sequelize, DataTypes) => {
       sessionStartDate: DataTypes.DATE,
       sessionEndDate: DataTypes.DATE,
       sessionTime: DataTypes.STRING,
-      sessionQr: DataTypes.TEXT, 
+      sessionQr: DataTypes.TEXT,
+      latitude: DataTypes.FLOAT,
+      longitude: DataTypes.FLOAT,
+      offlineQr: DataTypes.TEXT,
       numberOfStudents: {
         type: DataTypes.INTEGER,
         allowNull: true,

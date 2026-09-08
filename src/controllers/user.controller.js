@@ -14,12 +14,19 @@ exports.getUsers = async (req, res) => {
 
 exports.createUser = async (req, res) => {
     try {
-        const { name, email, password, role } = req.body;
+        const { name, email, phone_number, password, role } = req.body;
         const userRole = req.user.role;
 
         const hashed = await hashPassword(password);
 
-        const existingUser = await User.findOne({ where: { email } });
+        const existingUser = await User.findOne({
+            where: {
+                [require('sequelize').Op.or]: [
+                    { email },
+                    ...(phone_number ? [{ phone_number }] : []),
+                ],
+            },
+        });
 
         if (existingUser) {
             return res.status(400).json({ message: 'User already exists' });
@@ -40,6 +47,7 @@ exports.createUser = async (req, res) => {
         const user = await User.create({
             name,
             email,
+            phone_number: phone_number || null,
             password: hashed,
             role,
         });
@@ -48,6 +56,7 @@ exports.createUser = async (req, res) => {
             id: user.id,
             name: user.name,
             email: user.email,
+            phone_number: user.phone_number,
             role: user.role,
         });
     } catch (error) {

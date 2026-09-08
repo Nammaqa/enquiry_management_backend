@@ -4,6 +4,12 @@
     "NODE_ENV": "production"
   },
   "buildCommand": "npm install",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",
@@ -21,12 +27,6 @@
           "value": "*"
         }
       ]
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api"
     }
   ]
 }
