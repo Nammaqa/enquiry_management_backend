@@ -45,7 +45,7 @@ router.post(
   batchController.addStudentstoBatch
 );
 
-// Get students for batch enrollment (status 'class' or 'class qualified')
+// Get all students for batch enrollment
 router.get(
   '/students/enrollment',
   auth,
