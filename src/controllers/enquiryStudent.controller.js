@@ -161,6 +161,11 @@ exports.enquiryStudentLogin = async (req, res) => {
       token,
       name: enquiry.name,
       email: enquiry.email,
+      enquiryId: enquiry.id,
+      candidateStatus: enquiry.candidateStatus,
+      batchId: enquiry.batchId,
+      subjectIds: enquiry.subjectIds || [],
+      classroomEligible: ['class', 'class qualified'].includes(enquiry.candidateStatus),
     });
   } catch (error) {
     console.error('Error in enquiryStudentLogin:', error);
@@ -180,14 +185,26 @@ exports.validateToken = async (req, res) => {
       return res.status(401).json({ message: 'Invalid token' });
     }
 
+    const student = await Enquiry.findByPk(enquiry.enquiryId, {
+      attributes: ['id', 'name', 'email', 'candidateStatus', 'batchId', 'subjectIds'],
+    });
+
+    if (!student) {
+      return res.status(401).json({ message: 'Student account not found' });
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Token is valid',
       enquiry: {
-        enquiryId: enquiry.enquiryId,
-        name: enquiry.name,
-        email: enquiry.email,
+        enquiryId: student.id,
+        name: student.name,
+        email: student.email,
         role: enquiry.role,
+        candidateStatus: student.candidateStatus,
+        batchId: student.batchId,
+        subjectIds: student.subjectIds || [],
+        classroomEligible: ['class', 'class qualified'].includes(student.candidateStatus),
       }
     });
   } catch (error) {
