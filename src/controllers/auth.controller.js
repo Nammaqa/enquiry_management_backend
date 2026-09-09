@@ -2,6 +2,27 @@ const { User, OTP } = require('../models');
 const { comparePassword } = require('../utils/password');
 const { signToken } = require('../config/jwt');
 
+const normalizePhoneNumber = (phoneNumber) => {
+  if (!phoneNumber) return null;
+  return String(phoneNumber).replace(/\D/g, '');
+};
+
+const buildLoginResponse = (user, token) => ({
+  message: 'Login successful',
+  token,
+  user: {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone_number: user.phone_number,
+    role: user.role,
+  },
+  name: user.name,
+  email: user.email,
+  phone_number: user.phone_number,
+  role: user.role,
+});
+
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -57,6 +78,10 @@ exports.login = async (req, res) => {
     const { email, password, phone_number, otp_code } = req.body;
     const normalizedEmail = email ? String(email).trim().toLowerCase() : null;
     const normalizedPhone = normalizePhoneNumber(phone_number);
+
+    if (!normalizedEmail || !password || normalizedPhone || otp_code) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
 
     if (normalizedEmail && password && !normalizedPhone && !otp_code) {
       const user = await User.findOne({ where: { email: normalizedEmail } });
