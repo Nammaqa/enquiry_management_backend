@@ -26,8 +26,18 @@ exports.createBatch = async (req, res) => {
     const instructorId = fields.instructorId ? parseInt(extractField(fields.instructorId)) : null;
     const imageFile = files.image ? (Array.isArray(files.image) ? files.image[0] : files.image) : null;
 
-    const userId = req.user.id;  // From authenticated User
-    const userRole = req.user.role;  // Role validation
+    const parseDateField = (value) => {
+      if (!value) return null;
+
+      const parsedDate = new Date(value);
+      return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+    };
+
+    const parsedSessionStartDate = parseDateField(sessionStartDate);
+    const parsedSessionEndDate = parseDateField(sessionEndDate);
+
+    const userId = req.user.userId || req.user.id;  // From authenticated User
+    const userRole = String(req.user.role || '').toUpperCase();  // Role validation
 
     // Only ADMIN, COUNSELLOR, and INSTRUCTOR can create batches
     if (userRole !== 'ADMIN' && userRole !== 'COUNSELLOR' && userRole !== 'INSTRUCTOR') {
@@ -42,6 +52,20 @@ exports.createBatch = async (req, res) => {
     if (!name || !code || !sessionStartDate || !sessionTime || !subjectId) {
       return res.status(400).json({
         message: 'name, code, subjectId, sessionStartDate, and sessionTime are required',
+      });
+    }
+
+    if (!parsedSessionStartDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'sessionStartDate must be a valid date in YYYY-MM-DD or ISO format',
+      });
+    }
+
+    if (sessionEndDate && !parsedSessionEndDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'sessionEndDate must be a valid date in YYYY-MM-DD or ISO format',
       });
     }
 
@@ -78,8 +102,8 @@ exports.createBatch = async (req, res) => {
     const batch = await Batch.create({
       name,
       code,
-      sessionStartDate,
-      sessionEndDate: sessionEndDate || null,
+      sessionStartDate: parsedSessionStartDate,
+      sessionEndDate: parsedSessionEndDate,
       sessionTime,
       sessionLink: sessionLink || null,
       sessionQr: null, // Will be generated after batch is created
@@ -146,7 +170,7 @@ exports.createBatch = async (req, res) => {
 // Get available batches for instructor (created by admin/counsellor)
 exports.getAvailableBatches = async (req, res) => {
   try {
-    const userRole = req.user.role;
+    const userRole = String(req.user.role || '').toUpperCase();
 
     // Only instructors can view available batches
     if (userRole !== 'INSTRUCTOR') {
@@ -190,18 +214,16 @@ exports.getAvailableBatches = async (req, res) => {
 // Get all batches (with filtering for instructors)
 exports.getBatches = async (req, res) => {
   try {
-    const userRole = req.user.role;
-    const userId = req.user.id;
+    const userRole = String(req.user.role || '').toUpperCase();
+    const userId = req.user.userId || req.user.id;
     let batches;
 
-    // Instructors can only see their own batches and approved batches
+    // Instructors can only see approved batches assigned to their user account.
     if (userRole === 'INSTRUCTOR') {
       batches = await Batch.findAll({
         where: {
-          [db.Sequelize.Op.or]: [
-            { createdBy: userId }, // their own batches
-            { approvalStatus: 'approved' }, // approved batches
-          ],
+          instructorId: userId,
+          approvalStatus: 'approved',
         },
         attributes: { include: ['sessionQr'] },
         include: [
@@ -259,8 +281,8 @@ exports.getBatches = async (req, res) => {
 exports.getBatchById = async (req, res) => {
   try {
     const { batchId } = req.params;
-    const userId = req.user.id;
-    const userRole = req.user.role;
+    const userId = req.user.userId || req.user.id;
+    const userRole = String(req.user.role || '').toUpperCase();
 
     const batch = await Batch.findByPk(batchId, {
       attributes: { include: ['sessionQr'] },
@@ -368,8 +390,8 @@ exports.updateBatch = async (req, res) => {
     const approvalStatus = fields.approvalStatus ? fields.approvalStatus[0] : null;
     const imageFile = files.image ? files.image[0] : null;
 
-    const userId = req.user.id;
-    const userRole = req.user.role;
+    const userId = req.user.userId || req.user.id;
+    const userRole = String(req.user.role || '').toUpperCase();
 
     const batch = await Batch.findByPk(batchId);
 
@@ -480,7 +502,7 @@ exports.updateApprovalStatus = async (req, res) => {
   try {
     const { batchId } = req.params;
     const { approvalStatus } = req.body;
-    const userRole = req.user.role;
+    const userRole = String(req.user.role || '').toUpperCase();
 
     if (userRole !== 'ADMIN' && userRole !== 'COUNSELLOR') {
       return res.status(403).json({ message: 'Only Admin and Counsellor can approve/reject batches' });
@@ -584,7 +606,7 @@ exports.addStudentstoBatch = async (req, res) => {
 exports.getBatchesBySubject = async (req, res) => {
   try {
     console.log('getBatchesBySubject called with user:', req.user);
-    const instructorId = req.user.userId; // from token
+    const instructorId = req.user.userId || req.user.id; // from token
     const { subjectId } = req.params; // from URL
 
     if (!subjectId) {
@@ -642,7 +664,7 @@ exports.getBatchesBySubject = async (req, res) => {
 // Get all subjects for the logged-in instructor
 exports.getInstructorSubjects = async (req, res) => {
   try {
-    const instructorId = req.user.id; // from token
+    const instructorId = req.user.userId || req.user.id; // from token
 
     const subjects = await db.Subject.findAll({
       include: [{
@@ -739,8 +761,8 @@ exports.getBatchStudentsforEnrollment = async (req, res) => {
 exports.deleteBatch = async (req, res) => {
   try {
     const { batchId } = req.params;
-    const userId = req.user.id;
-    const userRole = req.user.role;
+    const userId = req.user.userId || req.user.id;
+    const userRole = String(req.user.role || '').toUpperCase();
 
     // Only admin/counsellor can delete batches
     if (userRole !== 'ADMIN' && userRole !== 'COUNSELLOR') {
