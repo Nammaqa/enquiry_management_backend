@@ -115,7 +115,7 @@ exports.getMySubjects = async (req, res) => {
     });
 
     if (!instructor) {
-      return res.status(404).json({ message: 'Instructor not found' });
+      return res.status(404).json({ message: 'Instructor not found or user is not an instructor' });
     }
 
     res.status(200).json({
@@ -192,28 +192,60 @@ exports.getInstructorProfile = async (req, res) => {
   try {
     const { instructorId } = req.params;
 
-    // Find instructor with user details
-    const instructor = await Instructor.findOne({
-      where: { userId: instructorId },
-      include: [{
-        model: User,
-        as: 'user',
-        attributes: ['id', 'name', 'email', 'role']
-      }, {
-        model: Subject,
-        through: { attributes: [] },
-        attributes: ['id', 'name', 'code']
-      }]
+    const user = await User.findByPk(instructorId, {
+      attributes: ['id', 'name', 'email', 'role'],
     });
 
-    if (!instructor) {
-      return res.status(404).json({ message: 'Instructor not found' });
+    if (!user || String(user.role || '').toLowerCase() !== 'instructor') {
+      return res.status(404).json({
+        success: false,
+        message: `Instructor user ${instructorId} not found`,
+      });
     }
 
-    // Count subjects
-    const subjectsCount = await Instructor.count({
-      where: { userId: instructorId }
+    const profileInclude = [{
+      model: User,
+      as: 'user',
+      attributes: ['id', 'name', 'email', 'role'],
+    }];
+
+    // Find instructor with user details.
+    let instructor = await Instructor.findOne({
+      where: { userId: instructorId },
+      include: profileInclude,
     });
+
+    // Older instructor users may not have a profile row yet.
+    if (!instructor) {
+      await Instructor.create({
+        userId: user.id,
+        name: user.name,
+      });
+
+      instructor = await Instructor.findOne({
+        where: { userId: instructorId },
+        include: profileInclude,
+      });
+    }
+
+    if (!instructor) {
+      return res.status(404).json({
+        success: false,
+        message: `Instructor profile not found for user ${instructorId}`,
+      });
+    }
+
+    // InstructorSubjects stores the User ID, not the InstructorProfile ID.
+    const instructorSubjects = await Subject.findAll({
+      include: [{
+        model: User,
+        as: 'instructors',
+        where: { id: instructorId },
+        attributes: [],
+      }],
+      attributes: ['id', 'name', 'code'],
+    });
+    const subjectsCount = instructorSubjects.length;
 
     // Count total students taught from batches (unique enquiries in batches created by this instructor)
     const studentsCount = await sequelize.query(`
@@ -226,9 +258,9 @@ exports.getInstructorProfile = async (req, res) => {
       type: sequelize.QueryTypes.SELECT
     });
 
-    // Count assignments created by instructor
+    // Count assignments created by instructor. Assignments store this as createdBy.
     const assignmentsCount = await Assignment.count({
-      where: { instructorId }
+      where: { createdBy: instructorId }
     });
 
     // Count mock interviews taken by instructor
@@ -269,7 +301,7 @@ exports.getInstructorProfile = async (req, res) => {
           averageRating: parseFloat(averageRating),
           totalFeedbacks: parseInt(totalFeedbacks)
         },
-        subjects: instructor.Subjects || []
+        subjects: instructorSubjects
       }
     });
   } catch (error) {
@@ -289,6 +321,7 @@ exports.getAllInstructorsProfiles = async (req, res) => {
         attributes: ['id', 'name', 'email', 'role']
       }, {
         model: Subject,
+        as: 'subjects',
         through: { attributes: [] },
         attributes: ['id', 'name', 'code']
       }]
@@ -458,7 +491,7 @@ exports.updateInstructorProfile = async (req, res) => {
           averageRating: parseFloat(feedbackStats[0]?.average_rating || 0),
           totalFeedbacks: parseInt(feedbackStats[0]?.total_feedbacks || 0)
         },
-        subjects: updatedInstructor.Subjects || []
+        subjects: updatedInstructor.subjects || []
       }
     });
   } catch (error) {

@@ -1,39 +1,16 @@
 const { User, OTP } = require('../models');
 const { comparePassword } = require('../utils/password');
 const { signToken } = require('../config/jwt');
-const { generateOTP, sendOTPViaSMS } = require('../utils/otp');
 
-const normalizePhoneNumber = (phoneNumber) => {
-  if (!phoneNumber) return null;
-  return String(phoneNumber).replace(/\D/g, '');
-};
-
-const buildLoginResponse = (user, token) => ({
-  message: 'Login successful',
-  token,
-  user: {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    phone_number: user.phone_number,
-    role: user.role,
-  },
-  name: user.name,
-  email: user.email,
-  phone_number: user.phone_number,
-  role: user.role,
-});
-
-exports.sendLoginOTP = async (req, res) => {
+exports.login = async (req, res) => {
   try {
-    const { phone_number } = req.body;
-    const normalizedPhone = normalizePhoneNumber(phone_number);
-
-    if (!normalizedPhone) {
-      return res.status(400).json({ message: 'Phone number is required' });
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ where: { phone_number: normalizedPhone } });
+    const user = await User.findOne({ where: { email } });
     if (!user) {
       return res.status(404).json({ message: 'Instructor not found' });
     }
@@ -101,67 +78,27 @@ exports.login = async (req, res) => {
       });
 
       return res.json(buildLoginResponse(user, token));
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
-
-    if (normalizedPhone && password && !email && !otp_code) {
-      const user = await User.findOne({ where: { phone_number: normalizedPhone } });
-      if (!user) {
-        return res.status(401).json({ message: 'Invalid credentials' });
-      }
 
       const isValid = await comparePassword(password, user.password);
       if (!isValid) {
         return res.status(401).json({ message: 'Invalid credentials' });
       }
 
-      const token = await signToken({
-        userId: user.id,
-        name: user.name,
-        email: user.email,
-        phone_number: user.phone_number,
-        role: user.role,
-      });
+    const token = await signToken({
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    });
 
-      return res.json(buildLoginResponse(user, token));
-    }
-
-    if (normalizedPhone && otp_code && !email && !password) {
-      const user = await User.findOne({ where: { phone_number: normalizedPhone } });
-      if (!user) {
-        return res.status(401).json({ message: 'Invalid credentials' });
-      }
-
-      const otpRecord = await OTP.findOne({
-        where: { phone_number: normalizedPhone, otp_code },
-      });
-
-      if (!otpRecord) {
-        return res.status(401).json({ message: 'Invalid OTP' });
-      }
-
-      if (new Date() > new Date(otpRecord.expires_at)) {
-        return res.status(401).json({ message: 'OTP has expired' });
-      }
-
-      await otpRecord.destroy();
-
-      const token = await signToken({
-        userId: user.id,
-        name: user.name,
-        email: user.email,
-        phone_number: user.phone_number,
-        role: user.role,
-      });
-
-      return res.json(buildLoginResponse(user, token));
-    }
-
-    if (!email && !normalizedPhone) {
-      return res.status(400).json({ message: 'Email or phone number is required' });
-    }
-
-    return res.status(400).json({
-      message: 'Invalid login method. Provide either: (1) email + password, (2) phone_number + password, or (3) phone_number + otp_code',
+    return res.json({
+      message: 'Login successful',
+      token,
+      name: user.name,
+      email: user.email,
+      role: user.role,
     });
   } catch (error) {
     console.error('Login error:', error);
