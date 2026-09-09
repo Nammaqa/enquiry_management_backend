@@ -688,15 +688,10 @@ exports.getInstructorSubjects = async (req, res) => {
   }
 };
 
-// Get all students for enrollment (status 'class' or 'class qualified')
+// Get all students for enrollment, regardless of their candidate status.
 exports.getBatchStudentsforEnrollment = async (req, res) => {
   try {
     const students = await db.Enquiry.findAll({
-      where: {
-        candidateStatus: {
-          [db.Sequelize.Op.in]: ['class', 'class qualified']
-        }
-      },
       attributes: ['id', 'name', 'email', 'phone', 'candidateStatus', 'packageId'],
       include: [
         {
