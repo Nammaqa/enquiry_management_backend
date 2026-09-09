@@ -12,3 +12,5 @@ router.put('/:id', auth, controller.updateSubject);
 router.delete('/:id', auth, controller.deleteSubject);
 
 module.exports = router;
+
+
