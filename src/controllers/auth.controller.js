@@ -78,10 +78,11 @@ exports.resendLoginOTP = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password, phone_number, otp_code } = req.body;
+    const normalizedEmail = email ? String(email).trim().toLowerCase() : null;
     const normalizedPhone = normalizePhoneNumber(phone_number);
 
-    if (email && password && !normalizedPhone && !otp_code) {
-      const user = await User.findOne({ where: { email } });
+    if (normalizedEmail && password && !normalizedPhone && !otp_code) {
+      const user = await User.findOne({ where: { email: normalizedEmail } });
       if (!user) {
         return res.status(401).json({ message: 'Invalid credentials' });
       }
