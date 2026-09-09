@@ -253,6 +253,7 @@ exports.getStudentClassroom = async (req, res) => {
           include: [
             {
               model: Subject,
+              as: 'subjects',
               through: { attributes: [] },
               attributes: ['id', 'name', 'code']
             }
@@ -297,8 +298,8 @@ exports.getStudentClassroom = async (req, res) => {
         packageId: enquiry.packageId,
         packageName: enquiry.package.name,
         packageImage: enquiry.package.image,
-        packageSubjects: enquiry.package.Subjects || [],
-        totalPackageSubjects: enquiry.package.Subjects?.length || 0
+        packageSubjects: enquiry.package.subjects || [],
+        totalPackageSubjects: enquiry.package.subjects?.length || 0
       };
     }
 
@@ -362,7 +363,7 @@ exports.getStudentClassroom = async (req, res) => {
       // Fetch assignments for this batch
       const assignments = await Assignment.findAll({
         where: { batchId: enquiry.batchId },
-        attributes: ['id', 'title', 'description', 'dueDate', 'createdDate', 'submissionFile'],
+        attributes: ['id', 'title', 'description', 'assignmentFile', 'dueDate', 'createdDate'],
         include: [
           {
             model: User,
