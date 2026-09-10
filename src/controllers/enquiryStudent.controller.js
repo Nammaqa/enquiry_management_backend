@@ -11,6 +11,7 @@ const User = db.User;
 const Assignment = db.Assignment;
 const Material = db.Material;
 const MockInterview = db.MockInterview;
+const BatchStudent = db.BatchStudent;
 const sequelize = db.sequelize;
 
 const validateAlphabetsOnly = (value, fieldName) => {
@@ -338,7 +339,14 @@ exports.getStudentClassroom = async (req, res) => {
       };
     }
 
-    // Prepare batch info with instructor
+    const batchStudent = enquiry.batchId
+      ? await BatchStudent.findOne({
+          where: { batchId: enquiry.batchId, enquiryId },
+          attributes: ['mode']
+        })
+      : null;
+
+    // Prepare batch info with instructor and attendance configuration
     const batchInfo = enquiry.batch ? {
       id: enquiry.batch.id,
       name: enquiry.batch.name,
@@ -347,6 +355,10 @@ exports.getStudentClassroom = async (req, res) => {
       timing: enquiry.batch.sessionTime,
       sessionLink: enquiry.batch.sessionLink,
       totalStudents: enquiry.batch.numberOfStudents,
+      mode: batchStudent?.mode || 'online',
+      latitude: enquiry.batch.latitude,
+      longitude: enquiry.batch.longitude,
+      radiusMeters: 15,
       subject: enquiry.batch.subject,
       instructor: enquiry.batch.creator
     } : null;
