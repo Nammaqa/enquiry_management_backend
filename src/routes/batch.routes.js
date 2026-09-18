@@ -45,6 +45,21 @@ router.post(
   batchController.addStudentstoBatch
 );
 
+// Remove student from batch
+router.delete(
+  '/students/remove',
+  auth,
+  batchController.removeStudentFromBatch
+);
+
+// Get student batch enrollments
+router.get(
+  '/student/:studentId/enrollments',
+  auth,
+  batchController.getStudentBatchEnrollments
+);
+
+
 // Get all students for batch enrollment
 router.get(
   '/students/enrollment',

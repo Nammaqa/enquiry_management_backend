@@ -273,6 +273,29 @@ exports.getAllEnquiries = async (req, res) => {
           attributes: ['id', 'packageCost', 'amountPaid', 'discount', 'balance'],
           required: false,
         },
+        {
+          model: require('../models').Batch,
+          as: 'enrolledBatches',
+          attributes: ['id', 'name', 'sessionStartDate', 'sessionEndDate', 'numberOfStudents', 'status'],
+          through: { attributes: [] },
+          include: [
+            {
+              model: require('../models').Subject,
+              as: 'subject',
+              attributes: ['name']
+            },
+            {
+              model: require('../models').User,
+              as: 'instructor',
+              attributes: ['name']
+            }
+          ]
+        },
+        {
+          model: require('../models').Attendance,
+          as: 'attendances',
+          attributes: ['batchId', 'attendanceCount']
+        }
       ],
       order: [['createdAt', 'DESC']],
     });

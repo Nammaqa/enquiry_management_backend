@@ -131,3 +131,35 @@ exports.getInstructors = async (req, res) => {
         res.status(500).json({ message: 'Failed to fetch instructors' });
     }
 };
+
+exports.updateUser = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { phone_number } = req.body;
+        const userrole = req.user.role;
+        
+        if (userrole !== 'ADMIN') {
+            return res.status(403).json({ message: 'Access denied' });
+        }
+        
+        const user = await User.findByPk(id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        
+        if (phone_number !== undefined && phone_number !== user.phone_number) {
+            // Check if phone number already exists for another user
+            const existingUser = await User.findOne({ where: { phone_number } });
+            if (existingUser && existingUser.id.toString() !== id.toString()) {
+                return res.status(400).json({ success: false, message: 'Phone number already exists' });
+            }
+            user.phone_number = phone_number || null;
+        }
+        
+        await user.save();
+        res.status(200).json({ message: 'User updated successfully', user });
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
