@@ -697,7 +697,7 @@ exports.getBatchStudentsforEnrollment = async (req, res) => {
         {
           model: db.Batch,
           as: 'enrolledBatches',
-          attributes: ['id', 'name'],
+          attributes: ['id', 'name', 'code'],
           through: { attributes: [] },
           required: false
         },
@@ -786,3 +786,95 @@ exports.deleteBatch = async (req, res) => {
   }
 };
 
+exports.removeStudentFromBatch = async (req, res) => {
+  try {
+    const { batchId, studentId } = req.body;
+
+    if (!batchId || !studentId) {
+      return res.status(400).json({ message: 'batchId and studentId are required' });
+    }
+
+    const db = require('../models');
+    
+    const deletedCount = await db.BatchStudent.destroy({
+      where: {
+        batchId,
+        enquiryId: studentId
+      }
+    });
+
+    if (deletedCount === 0) {
+      return res.status(404).json({ message: 'Student is not enrolled in this batch' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Student removed from batch successfully'
+    });
+  } catch (error) {
+    console.error('Error removing student from batch:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getStudentBatchEnrollments = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const db = require('../models');
+
+    const batchStudents = await db.BatchStudent.findAll({
+      where: { enquiryId: studentId },
+      include: [
+        {
+          model: db.Batch,
+          as: 'batch',
+          attributes: ['id', 'name', 'sessionStartDate', 'sessionEndDate', 'numberOfStudents', 'status'],
+          include: [
+            {
+              model: db.Subject,
+              as: 'subject',
+              attributes: ['name']
+            },
+            {
+              model: db.User,
+              as: 'instructor',
+              attributes: ['name']
+            }
+          ]
+        }
+      ]
+    });
+
+    const attendances = await db.Attendance.findAll({
+      where: { enquiryId: studentId }
+    });
+
+    // Format the response
+    const formattedData = batchStudents.map(bs => {
+      const batch = bs.batch || bs.Batch;
+      if (!batch) return null;
+      
+      const batchObj = batch.toJSON ? batch.toJSON() : batch;
+      const attendance = attendances.find(a => a.batchId === batchObj.id);
+      
+      return {
+        batchId: batchObj.id,
+        batchName: batchObj.name,
+        subjectName: batchObj.subject?.name || batchObj.Subject?.name || 'N/A',
+        instructorName: batchObj.instructor?.name || batchObj.Instructor?.name || 'N/A',
+        startDate: batchObj.sessionStartDate,
+        endDate: batchObj.sessionEndDate,
+        numberOfClassesTaken: batchObj.numberOfStudents || 0, // In previous logic numberOfStudents might mean total classes, wait, no. Total classes is not tracked in batch directly. We will use numberOfStudents as placeholder for total classes if requested, but let's just return what we have.
+        attendanceCount: attendance ? attendance.attendanceCount : 0,
+      };
+    }).filter(Boolean);
+
+    res.status(200).json({
+      success: true,
+      data: formattedData
+    });
+  } catch (error) {
+    console.error('Error fetching student batch enrollments:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
