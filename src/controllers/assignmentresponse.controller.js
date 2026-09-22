@@ -1,5 +1,5 @@
 const db = require('../models');
-const { uploadImage } = require('../utils/cloudinary');
+const { uploadImage, uploadDocument } = require('../utils/cloudinary');
 const { Formidable } = require('formidable');
 const fs = require('fs');
 
@@ -65,7 +65,7 @@ exports.createAssignmentResponse = async (req, res) => {
         try {
           const fileBuffer = await fs.promises.readFile(file.filepath);
           const fileName = `assignment-response-${assignmentId}-${enquiryId}-${Date.now()}-${index}`;
-          const uploadResult = await uploadImage(fileBuffer, fileName);
+          const uploadResult = await uploadDocument(fileBuffer, fileName);
 
           // Cleanup local temp file
           await fs.promises.unlink(file.filepath).catch(() => { });
@@ -217,7 +217,7 @@ exports.updateStudentSubmission = async (req, res) => {
         try {
           const fileBuffer = await fs.promises.readFile(file.filepath);
           const fileName = `assignment-response-${submission.assignmentId}-${enquiryId}-${Date.now()}-${index}`;
-          const uploadResult = await uploadImage(fileBuffer, fileName);
+          const uploadResult = await uploadDocument(fileBuffer, fileName);
           await fs.promises.unlink(file.filepath).catch(() => { });
           return {
             url: uploadResult.secure_url,

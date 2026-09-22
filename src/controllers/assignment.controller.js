@@ -6,7 +6,7 @@ const User = db.User;
 const { Formidable } = require('formidable');
 const fs = require('fs').promises;
 const path = require('path');
-const { uploadImage } = require('../utils/cloudinary');
+const { uploadImage, uploadDocument } = require('../utils/cloudinary');
 
 // Create Assignment by Instructor for their associated batch
 exports.createInstructorAssignment = async (req, res) => {
@@ -79,7 +79,7 @@ exports.createInstructorAssignment = async (req, res) => {
       const uniqueName = `assignment-${batchId}-${Date.now()}`;
 
       try {
-        const uploadResult = await uploadImage(fileBuffer, uniqueName);
+        const uploadResult = await uploadDocument(fileBuffer, uniqueName);
         assignmentFile = uploadResult.secure_url;
       } catch (uploadError) {
         console.error('Cloudinary upload error:', uploadError);
@@ -267,7 +267,7 @@ exports.updateInstructorAssignment = async (req, res) => {
       const uniqueName = `assignment-${assignment.batchId}-${Date.now()}`;
 
       try {
-        const uploadResult = await uploadImage(fileBuffer, uniqueName);
+        const uploadResult = await uploadDocument(fileBuffer, uniqueName);
         updateData.assignmentFile = uploadResult.secure_url;
       } catch (uploadError) {
         console.error('Cloudinary upload error:', uploadError);

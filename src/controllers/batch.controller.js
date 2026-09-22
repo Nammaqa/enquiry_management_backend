@@ -266,10 +266,34 @@ exports.getBatches = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    let batchesWithCount = [];
+
+    if (batches.length > 0) {
+      const batchIds = batches.map(b => b.id);
+      // Fetch all enrollments for these batches
+      const enrollments = await db.BatchStudent.findAll({
+        attributes: ['batchId'],
+        where: { batchId: batchIds },
+        raw: true
+      });
+
+      // Count them manually in JS to avoid SQL dialect issues with group/count
+      const enrollmentMap = {};
+      enrollments.forEach(e => {
+        enrollmentMap[e.batchId] = (enrollmentMap[e.batchId] || 0) + 1;
+      });
+
+      batchesWithCount = batches.map(b => {
+        const batchObj = b.toJSON();
+        batchObj.enrolledCount = enrollmentMap[b.id] || 0;
+        return batchObj;
+      });
+    }
+
     res.status(200).json({
       success: true,
       total: batches.length,
-      data: batches,
+      data: batchesWithCount,
     });
   } catch (error) {
     console.error('Error in getBatches:', error);

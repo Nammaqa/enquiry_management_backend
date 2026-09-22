@@ -72,6 +72,7 @@ exports.uploadDocument = async (fileBuffer, fileName) => {
         public_id: fileName,
         folder: 'enquiry_system/documents',
         overwrite: true,
+        flags: 'attachment',
       },
       (error, result) => {
         if (error) {
