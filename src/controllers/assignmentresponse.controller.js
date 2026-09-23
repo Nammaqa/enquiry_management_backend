@@ -2,6 +2,7 @@ const db = require('../models');
 const { uploadImage, uploadDocument } = require('../utils/cloudinary');
 const { Formidable } = require('formidable');
 const fs = require('fs');
+const path = require('path');
 
 const AssignmentResponse = db.AssignmentResponse;
 const Assignment = db.Assignment;
@@ -64,7 +65,8 @@ exports.createAssignmentResponse = async (req, res) => {
       const uploadPromises = filesArray.map(async (file, index) => {
         try {
           const fileBuffer = await fs.promises.readFile(file.filepath);
-          const fileName = `assignment-response-${assignmentId}-${enquiryId}-${Date.now()}-${index}`;
+          const ext = path.extname(file.originalFilename || file.newFilename || '');
+          const fileName = `assignment-response-${assignmentId}-${enquiryId}-${Date.now()}-${index}${ext}`;
           const uploadResult = await uploadDocument(fileBuffer, fileName);
 
           // Cleanup local temp file
@@ -216,7 +218,8 @@ exports.updateStudentSubmission = async (req, res) => {
       const uploadPromises = filesArray.map(async (file, index) => {
         try {
           const fileBuffer = await fs.promises.readFile(file.filepath);
-          const fileName = `assignment-response-${submission.assignmentId}-${enquiryId}-${Date.now()}-${index}`;
+          const ext = path.extname(file.originalFilename || file.newFilename || '');
+          const fileName = `assignment-response-${submission.assignmentId}-${enquiryId}-${Date.now()}-${index}${ext}`;
           const uploadResult = await uploadDocument(fileBuffer, fileName);
           await fs.promises.unlink(file.filepath).catch(() => { });
           return {

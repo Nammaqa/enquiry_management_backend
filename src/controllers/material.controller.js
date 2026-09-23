@@ -73,7 +73,8 @@ exports.createInstructorMaterial = async (req, res) => {
     // Handle file upload
     const file = uploadedFile;
     const fileBuffer = await fs.readFile(file.filepath);
-    const uniqueName = `material-${batchId}-${Date.now()}`;
+    const ext = path.extname(file.originalFilename || file.newFilename || '');
+    const uniqueName = `material-${batchId}-${Date.now()}${ext}`;
 
     // If title is missing, use the original filename
     if (!title) {
@@ -219,7 +220,8 @@ exports.updateInstructorMaterial = async (req, res) => {
 
     if (uploadedFile) {
       const fileBuffer = await fs.readFile(uploadedFile.filepath);
-      const uniqueName = `material-${material.batchId}-${Date.now()}`;
+      const ext = path.extname(uploadedFile.originalFilename || uploadedFile.newFilename || '');
+      const uniqueName = `material-${material.batchId}-${Date.now()}${ext}`;
 
       try {
         const uploadResult = await uploadDocument(fileBuffer, uniqueName);

@@ -103,7 +103,8 @@ exports.scheduleMockInterview = async (req, res) => {
 
     if (uploadedFile) {
       const fileBuffer = await fs.readFile(uploadedFile.filepath);
-      const uniqueName = `mock-interview-${batchId}-${enquiry.id}-${Date.now()}`;
+      const ext = path.extname(uploadedFile.originalFilename || uploadedFile.newFilename || '');
+      const uniqueName = `mock-interview-${batchId}-${enquiry.id}-${Date.now()}${ext}`;
 
       try {
         const uploadResult = await uploadDocument(fileBuffer, uniqueName);
@@ -525,7 +526,8 @@ exports.updateMockInterview = async (req, res) => {
 
       // Upload new document
       const fileBuffer = await fs.readFile(uploadedFile.filepath);
-      const uniqueName = `mock-interview-${interviewId}-${Date.now()}`;
+      const ext = path.extname(uploadedFile.originalFilename || uploadedFile.newFilename || '');
+      const uniqueName = `mock-interview-${interviewId}-${Date.now()}${ext}`;
 
       try {
         const uploadResult = await uploadDocument(fileBuffer, uniqueName);

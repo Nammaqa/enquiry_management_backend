@@ -76,7 +76,8 @@ exports.createInstructorAssignment = async (req, res) => {
     if (files.assignmentFile && files.assignmentFile[0]) {
       const file = files.assignmentFile[0];
       const fileBuffer = await fs.readFile(file.filepath);
-      const uniqueName = `assignment-${batchId}-${Date.now()}`;
+      const ext = path.extname(file.originalFilename || file.newFilename || '');
+      const uniqueName = `assignment-${batchId}-${Date.now()}${ext}`;
 
       try {
         const uploadResult = await uploadDocument(fileBuffer, uniqueName);
@@ -264,7 +265,8 @@ exports.updateInstructorAssignment = async (req, res) => {
     if (files.assignmentFile && files.assignmentFile[0]) {
       const file = files.assignmentFile[0];
       const fileBuffer = await fs.readFile(file.filepath);
-      const uniqueName = `assignment-${assignment.batchId}-${Date.now()}`;
+      const ext = path.extname(file.originalFilename || file.newFilename || '');
+      const uniqueName = `assignment-${assignment.batchId}-${Date.now()}${ext}`;
 
       try {
         const uploadResult = await uploadDocument(fileBuffer, uniqueName);
