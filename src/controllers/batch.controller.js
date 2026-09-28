@@ -402,6 +402,27 @@ exports.getBatchDetails = async (req, res) => {
       return res.status(404).json({ message: 'Batch not found' });
     }
 
+    const batchData = batch.toJSON();
+    if (batchData.enrolledStudents) {
+      batchData.enrolledStudents = batchData.enrolledStudents.map(student => {
+        let paymentStatus = 'not paid';
+        if (student.billing) {
+          const amountPaid = parseFloat(student.billing.amountPaid || 0);
+          const balance = parseFloat(student.billing.balance || 0);
+          const packageCost = parseFloat(student.billing.packageCost || 0);
+          if (balance === 0 || amountPaid >= packageCost) {
+            paymentStatus = 'fully paid';
+          } else if (amountPaid > 0 && balance > 0) {
+            paymentStatus = 'partially paid';
+          }
+        }
+        return {
+          ...student,
+          paymentStatus
+        };
+      });
+    }
+
     res.status(200).json({
       success: true,
       data: batchData
