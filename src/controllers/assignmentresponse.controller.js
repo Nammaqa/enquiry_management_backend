@@ -16,20 +16,31 @@ const Enquiry = db.Enquiry;
  */
 exports.createAssignmentResponse = async (req, res) => {
   try {
-    // Parse form data using formidable
-    const form = new Formidable({
-      multiples: true, // Allow multiple files
-      maxFileSize: 10 * 1024 * 1024, // 10MB limit
-      keepExtensions: true
-    });
+    let assignmentId, batchId, submissionNotes;
+    let filesArray = [];
+    const contentType = req.headers['content-type'] || '';
 
-    const [fields, files] = await form.parse(req);
+    if (contentType.includes('multipart/form-data')) {
+      const form = new Formidable({
+        multiples: true, // Allow multiple files
+        maxFileSize: 10 * 1024 * 1024, // 10MB limit
+        keepExtensions: true
+      });
+      const [fields, files] = await form.parse(req);
+      
+      assignmentId = fields.assignmentId ? fields.assignmentId[0] : null;
+      batchId = fields.batchId ? fields.batchId[0] : null;
+      submissionNotes = fields.submissionNotes ? fields.submissionNotes[0] : null;
 
-    // Extract field values (formidable returns arrays for fields)
-    const assignmentId = fields.assignmentId ? fields.assignmentId[0] : null;
-    const batchId = fields.batchId ? fields.batchId[0] : null;
+      const uploadedFiles = files.submissionFiles || [];
+      filesArray = Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles];
+    } else {
+      assignmentId = req.body.assignmentId;
+      batchId = req.body.batchId;
+      submissionNotes = req.body.submissionNotes;
+    }
+
     const enquiryId = req.enquiry?.enquiryId; // Get from student token middleware
-    const submissionNotes = fields.submissionNotes ? fields.submissionNotes[0] : null;
 
     // Validate required fields
     if (!assignmentId || !batchId) {
@@ -56,10 +67,6 @@ exports.createAssignmentResponse = async (req, res) => {
 
     // Handle multiple file uploads to Cloudinary
     let submissionFileUrls = [];
-
-    // Normalise files to an array (formidable can return a single object or an array)
-    const uploadedFiles = files.submissionFiles || [];
-    const filesArray = Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles];
 
     if (filesArray.length > 0 && filesArray[0] !== undefined) {
       const uploadPromises = filesArray.map(async (file, index) => {
@@ -184,22 +191,29 @@ exports.updateStudentSubmission = async (req, res) => {
       return res.status(400).json({ message: 'Cannot edit an assignment that has already been reviewed' });
     }
 
-    // Parse form data
-    const form = new Formidable({
-      multiples: true,
-      maxFileSize: 10 * 1024 * 1024,
-      keepExtensions: true
-    });
+    let submissionNotes;
+    let filesArray = [];
+    const contentType = req.headers['content-type'] || '';
 
-    const [fields, files] = await form.parse(req);
-    const submissionNotes = fields.submissionNotes ? fields.submissionNotes[0] : null;
+    if (contentType.includes('multipart/form-data')) {
+      const form = new Formidable({
+        multiples: true,
+        maxFileSize: 10 * 1024 * 1024,
+        keepExtensions: true
+      });
+      const [fields, files] = await form.parse(req);
+      submissionNotes = fields.submissionNotes ? fields.submissionNotes[0] : null;
+
+      const uploadedFiles = files.submissionFiles || [];
+      filesArray = Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles];
+    } else {
+      submissionNotes = req.body.submissionNotes;
+    }
 
     let updateData = {};
     if (submissionNotes) updateData.submissionNotes = submissionNotes;
 
     // Handle file updates (replaces old files if new ones are provided)
-    const uploadedFiles = files.submissionFiles || [];
-    const filesArray = Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles];
 
     if (filesArray.length > 0 && filesArray[0] !== undefined) {
       // 1. Delete old files from Cloudinary
@@ -299,6 +313,50 @@ exports.deleteStudentSubmission = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in deleteStudentSubmission:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+};
+/**
+ * GET All Assignment Responses (Instructors/Admins)
+ * GET /api/assignment-responses?assignmentId=X&batchId=Y
+ */
+exports.getAllResponses = async (req, res) => {
+  try {
+    const { assignmentId, batchId } = req.query;
+
+    const where = {};
+    if (assignmentId) where.assignmentId = assignmentId;
+    if (batchId) where.batchId = batchId;
+
+    const submissions = await AssignmentResponse.findAll({
+      where,
+      include: [
+        {
+          model: Assignment,
+          as: 'assignment',
+          attributes: ['id', 'title', 'description', 'dueDate']
+        },
+        {
+          model: Batch,
+          as: 'batch',
+          attributes: ['id', 'name', 'code']
+        },
+        {
+          model: Enquiry,
+          as: 'enquiry',
+          attributes: ['id', 'name', 'email', 'phone']
+        }
+      ],
+      order: [['submittedOn', 'DESC']]
+    });
+
+    res.status(200).json({
+      success: true,
+      count: submissions.length,
+      data: submissions
+    });
+  } catch (error) {
+    console.error('Error in getAllResponses:', error);
     res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 };
