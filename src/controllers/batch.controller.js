@@ -199,7 +199,28 @@ exports.getAvailableBatches = async (req, res) => {
       order: [['createdAt', 'DESC']],
     });
 
-    res.status(200).json({
+    
+      const batchData = batch.toJSON();
+      if (batchData.enrolledStudents) {
+        batchData.enrolledStudents = batchData.enrolledStudents.map(student => {
+          let paymentStatus = 'not paid';
+          if (student.billing) {
+            const amountPaid = parseFloat(student.billing.amountPaid || 0);
+            const balance = parseFloat(student.billing.balance || 0);
+            const packageCost = parseFloat(student.billing.packageCost || 0);
+            if (balance === 0 || amountPaid >= packageCost) {
+              paymentStatus = 'fully paid';
+            } else if (amountPaid > 0 && balance > 0) {
+              paymentStatus = 'partially paid';
+            }
+          }
+          return {
+            ...student,
+            paymentStatus
+          };
+        });
+      }
+      res.status(200).json({
       success: true,
       message: 'Available batches created by Admin/Counsellor',
       total: batches.length,
@@ -365,6 +386,13 @@ exports.getBatchDetails = async (req, res) => {
           model: db.Enquiry,
           as: 'enrolledStudents',
           attributes: ['id', 'name', 'email', 'phone', 'candidateStatus'],
+            include: [{
+              model: db.Billing,
+              as: 'billing',
+              attributes: ['id', 'packageCost', 'amountPaid', 'discount', 'balance'],
+              required: false
+            }],
+            
           through: { attributes: [] } // Hide junction table fields
         }
       ]
@@ -376,7 +404,7 @@ exports.getBatchDetails = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: batch
+      data: batchData
     });
   } catch (error) {
     console.error('Error in getBatchDetails:', error);
@@ -718,6 +746,12 @@ exports.getBatchStudentsforEnrollment = async (req, res) => {
     const students = await db.Enquiry.findAll({
       attributes: ['id', 'name', 'email', 'phone', 'candidateStatus', 'packageId'],
       include: [
+          {
+            model: db.Billing,
+            as: 'billing',
+            attributes: ['id', 'packageCost', 'amountPaid', 'discount', 'balance'],
+            required: false
+          },
         {
           model: db.Batch,
           as: 'enrolledBatches',
@@ -748,7 +782,20 @@ exports.getBatchStudentsforEnrollment = async (req, res) => {
     const formattedStudents = students.map(student => {
       const studentData = student.toJSON();
 
-      return {
+      
+        let paymentStatus = 'not paid';
+        if (studentData.billing) {
+          const amountPaid = parseFloat(studentData.billing.amountPaid || 0);
+          const balance = parseFloat(studentData.billing.balance || 0);
+          const packageCost = parseFloat(studentData.billing.packageCost || 0);
+          if (balance === 0 || amountPaid >= packageCost) {
+            paymentStatus = 'fully paid';
+          } else if (amountPaid > 0 && balance > 0) {
+            paymentStatus = 'partially paid';
+          }
+        }
+        return {
+          paymentStatus,
         id: studentData.id,
         name: studentData.name,
         email: studentData.email,
