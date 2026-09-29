@@ -21,19 +21,22 @@ exports.createAssignmentResponse = async (req, res) => {
     const contentType = req.headers['content-type'] || '';
 
     if (contentType.includes('multipart/form-data')) {
-      const form = new Formidable({
-        multiples: true, // Allow multiple files
-        maxFileSize: 10 * 1024 * 1024, // 10MB limit
-        keepExtensions: true
-      });
-      const [fields, files] = await form.parse(req);
-      
-      assignmentId = fields.assignmentId ? fields.assignmentId[0] : null;
-      batchId = fields.batchId ? fields.batchId[0] : null;
-      submissionNotes = fields.submissionNotes ? fields.submissionNotes[0] : null;
+      try {
+        const form = new Formidable({
+          maxFileSize: 10 * 1024 * 1024, // 10MB limit
+          keepExtensions: true
+        });
+        const [fields, files] = await form.parse(req);
+        
+        assignmentId = fields.assignmentId ? fields.assignmentId[0] : null;
+        batchId = fields.batchId ? fields.batchId[0] : null;
+        submissionNotes = fields.submissionNotes ? fields.submissionNotes[0] : null;
 
-      const uploadedFiles = files.submissionFiles || [];
-      filesArray = Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles];
+        const uploadedFiles = files.submissionFiles || [];
+        filesArray = Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles];
+      } catch (parseError) {
+        return res.status(400).json({ message: 'Error parsing form data', error: parseError.message });
+      }
     } else {
       assignmentId = req.body?.assignmentId;
       batchId = req.body?.batchId;
@@ -111,7 +114,7 @@ exports.createAssignmentResponse = async (req, res) => {
       batchId,
       enquiryId,
       submissionNotes: submissionNotes || null,
-      submissionFiles: submissionFileUrls, // Store array of {url, publicId} as JSON
+      submissionFiles: submissionFileUrls.length > 0 ? submissionFileUrls : null, // Store array of {url, publicId} as JSON or null
       status: 'submitted',
       submittedOn: new Date(),
     });
@@ -208,16 +211,19 @@ exports.updateStudentSubmission = async (req, res) => {
     const contentType = req.headers['content-type'] || '';
 
     if (contentType.includes('multipart/form-data')) {
-      const form = new Formidable({
-        multiples: true,
-        maxFileSize: 10 * 1024 * 1024,
-        keepExtensions: true
-      });
-      const [fields, files] = await form.parse(req);
-      submissionNotes = fields.submissionNotes ? fields.submissionNotes[0] : null;
+      try {
+        const form = new Formidable({
+          maxFileSize: 10 * 1024 * 1024,
+          keepExtensions: true
+        });
+        const [fields, files] = await form.parse(req);
+        submissionNotes = fields.submissionNotes ? fields.submissionNotes[0] : null;
 
-      const uploadedFiles = files.submissionFiles || [];
-      filesArray = Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles];
+        const uploadedFiles = files.submissionFiles || [];
+        filesArray = Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles];
+      } catch (parseError) {
+        return res.status(400).json({ message: 'Error parsing form data', error: parseError.message });
+      }
     } else {
       submissionNotes = req.body?.submissionNotes;
     }
@@ -339,6 +345,10 @@ exports.getAllResponses = async (req, res) => {
     const where = {};
     if (assignmentId) where.assignmentId = assignmentId;
     if (batchId) where.batchId = batchId;
+
+    if (req.isEnquiryStudent && req.enquiry?.enquiryId) {
+      where.enquiryId = req.enquiry.enquiryId;
+    }
 
     const submissions = await AssignmentResponse.findAll({
       where,
