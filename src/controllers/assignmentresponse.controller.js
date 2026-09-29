@@ -49,6 +49,12 @@ exports.createAssignmentResponse = async (req, res) => {
       });
     }
 
+    assignmentId = parseInt(assignmentId, 10);
+    batchId = parseInt(batchId, 10);
+    if (isNaN(assignmentId) || isNaN(batchId)) {
+      return res.status(400).json({ message: 'assignmentId and batchId must be valid numbers' });
+    }
+
     if (!enquiryId) {
       return res.status(401).json({ message: 'Authentication required' });
     }
@@ -63,6 +69,12 @@ exports.createAssignmentResponse = async (req, res) => {
     const batch = await Batch.findByPk(batchId);
     if (!batch) {
       return res.status(404).json({ message: 'Batch not found' });
+    }
+
+    // Check if enquiry exists
+    const enquiry = await Enquiry.findByPk(enquiryId);
+    if (!enquiry) {
+      return res.status(404).json({ message: 'Enquiry not found or deleted' });
     }
 
     // Handle multiple file uploads to Cloudinary
