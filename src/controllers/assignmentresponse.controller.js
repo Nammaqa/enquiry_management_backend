@@ -35,9 +35,9 @@ exports.createAssignmentResponse = async (req, res) => {
       const uploadedFiles = files.submissionFiles || [];
       filesArray = Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles];
     } else {
-      assignmentId = req.body.assignmentId;
-      batchId = req.body.batchId;
-      submissionNotes = req.body.submissionNotes;
+      assignmentId = req.body?.assignmentId;
+      batchId = req.body?.batchId;
+      submissionNotes = req.body?.submissionNotes;
     }
 
     const enquiryId = req.enquiry?.enquiryId; // Get from student token middleware
@@ -207,7 +207,7 @@ exports.updateStudentSubmission = async (req, res) => {
       const uploadedFiles = files.submissionFiles || [];
       filesArray = Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles];
     } else {
-      submissionNotes = req.body.submissionNotes;
+      submissionNotes = req.body?.submissionNotes;
     }
 
     let updateData = {};
