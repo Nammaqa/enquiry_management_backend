@@ -47,14 +47,6 @@ exports.scheduleMockInterview = async (req, res) => {
     // Normalize mode to lowercase
     const normalizedMode = mode.toLowerCase();
 
-    // Validate online mode has interview link
-    if (normalizedMode === 'online' && !interviewLink) {
-      return res.status(400).json({
-        success: false,
-        message: 'interviewLink is required for online mode',
-      });
-    }
-
     // Check if batch exists
     const batch = await Batch.findByPk(batchId);
     if (!batch) {
@@ -97,6 +89,18 @@ exports.scheduleMockInterview = async (req, res) => {
       });
     }
 
+    let finalInterviewLink = interviewLink;
+    if (normalizedMode === 'online' && !finalInterviewLink) {
+      // Automatically generate a Google Meet link
+      const chars = 'abcdefghijklmnopqrstuvwxyz';
+      const randomString = (length) => Array.from({length}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+      
+      const sName = encodeURIComponent(studentName || enquiry.name || 'Student');
+      const iName = encodeURIComponent(instructor.name || 'Instructor');
+      // Format it with instructor and student initials or just random, appending student and instructor info
+      finalInterviewLink = `https://meet.google.com/${randomString(3)}-${randomString(4)}-${randomString(3)}?student=${sName}&instructor=${iName}`;
+    }
+
     // Handle document upload if provided
     let documentUrl = null;
     const uploadedFile = files.document ? files.document[0] : null;
@@ -131,7 +135,7 @@ exports.scheduleMockInterview = async (req, res) => {
       interviewDate,
       interviewTime,
       mode: normalizedMode,
-      interviewLink: normalizedMode === 'online' ? interviewLink : null,
+      interviewLink: normalizedMode === 'online' ? finalInterviewLink : null,
       documentUpload: documentUrl,
       status: 'scheduled',
     });
@@ -491,18 +495,24 @@ exports.updateMockInterview = async (req, res) => {
     const normalizedMode = mode ? mode.toLowerCase() : interview.mode;
 
     // Validate online mode has interview link
-    if (normalizedMode === 'online' && mode && !interviewLink && !interview.interviewLink) {
-      return res.status(400).json({
-        success: false,
-        message: 'interviewLink is required for online mode',
-      });
+    let finalInterviewLink = interviewLink;
+    if (normalizedMode === 'online' && mode && !finalInterviewLink && !interview.interviewLink) {
+      const chars = 'abcdefghijklmnopqrstuvwxyz';
+      const randomString = (length) => Array.from({length}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+      
+      // Fetch instructor for the name
+      const instructor = await User.findByPk(interview.instructorId);
+      const sName = encodeURIComponent(studentName || interview.studentName || 'Student');
+      const iName = encodeURIComponent((instructor && instructor.name) || 'Instructor');
+      
+      finalInterviewLink = `https://meet.google.com/${randomString(3)}-${randomString(4)}-${randomString(3)}?student=${sName}&instructor=${iName}`;
     }
 
     // Update fields if provided
     if (interviewDate) interview.interviewDate = interviewDate;
     if (interviewTime) interview.interviewTime = interviewTime;
     if (mode) interview.mode = normalizedMode;
-    if (interviewLink) interview.interviewLink = interviewLink;
+    if (finalInterviewLink) interview.interviewLink = finalInterviewLink;
     if (studentName) interview.studentName = studentName;
 
     // For offline mode, clear the interview link
