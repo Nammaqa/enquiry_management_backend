@@ -150,40 +150,13 @@ exports.getStudentSubmissions = async (req, res) => {
       order: [['submittedOn', 'DESC']]
     });
 
-    res.status(200).json({
-      success: true,
-      count: submissions.length,
-      data: submissions
-    });
-  } catch (error) {
-    console.error('Error in getStudentSubmissions:', error);
-    res.status(500).json({ message: 'Internal server error', error: error.message });
-  }
-};
+      const [fields, files] = await form.parse(req);
+      submissionNotes = fields.submissionNotes ? fields.submissionNotes[0] : null;
 
-/**
- * UPDATE Student's Assignment Submission
- * PUT /api/assignment-responses/:id
- * Allows updating notes and replacing files.
- */
-exports.updateStudentSubmission = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const enquiryId = req.enquiry?.enquiryId;
-
-    if (!enquiryId) {
-      return res.status(401).json({ message: 'Authentication required' });
-    }
-
-    const submission = await AssignmentResponse.findOne({
-      where: { id, enquiryId }
-    });
-
-    console.log(`DEBUG: updateStudentSubmission - Searching for id: ${id}, enquiryId: ${enquiryId}`);
-
-    if (!submission) {
-      console.log(`DEBUG: updateStudentSubmission - Submission NOT found for id: ${id}, enquiryId: ${enquiryId}`);
-      return res.status(404).json({ message: 'Submission not found or unauthorized' });
+      const uploadedFiles = files.submissionFiles || [];
+      filesArray = Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles];
+    } else {
+      submissionNotes = req.body.submissionNotes;
     }
 
     // Prevent editing if already reviewed
