@@ -16,12 +16,156 @@ const Enquiry = db.Enquiry;
  */
 exports.createAssignmentResponse = async (req, res) => {
   try {
-    // Parse form data using formidable
-    let assignmentId, batchId, submissionNotes, filesArray = [];
+    let assignmentId, batchId, submissionNotes;
+    let filesArray = [];
     const contentType = req.headers['content-type'] || '';
 
     if (contentType.includes('multipart/form-data')) {
-      let submissionNotes, filesArray = [];
+      const form = new Formidable({
+        multiples: true, // Allow multiple files
+        maxFileSize: 10 * 1024 * 1024, // 10MB limit
+        keepExtensions: true
+      });
+      const [fields, files] = await form.parse(req);
+      
+      assignmentId = fields.assignmentId ? fields.assignmentId[0] : null;
+      batchId = fields.batchId ? fields.batchId[0] : null;
+      submissionNotes = fields.submissionNotes ? fields.submissionNotes[0] : null;
+
+      const uploadedFiles = files.submissionFiles || [];
+      filesArray = Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles];
+    } else {
+      assignmentId = req.body.assignmentId;
+      batchId = req.body.batchId;
+      submissionNotes = req.body.submissionNotes;
+    }
+
+    const enquiryId = req.enquiry?.enquiryId; // Get from student token middleware
+
+    // Validate required fields
+    if (!assignmentId || !batchId) {
+      return res.status(400).json({
+        message: 'assignmentId and batchId are required',
+      });
+    }
+
+    if (!enquiryId) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    // Check if assignment exists
+    const assignment = await Assignment.findByPk(assignmentId);
+    if (!assignment) {
+      return res.status(404).json({ message: 'Assignment not found' });
+    }
+
+    // Check if batch exists
+    const batch = await Batch.findByPk(batchId);
+    if (!batch) {
+      return res.status(404).json({ message: 'Batch not found' });
+    }
+
+    // Handle multiple file uploads to Cloudinary
+    let submissionFileUrls = [];
+
+    if (filesArray.length > 0 && filesArray[0] !== undefined) {
+      const uploadPromises = filesArray.map(async (file, index) => {
+        try {
+          const fileBuffer = await fs.promises.readFile(file.filepath);
+          const ext = path.extname(file.originalFilename || file.newFilename || '');
+          const fileName = `assignment-response-${assignmentId}-${enquiryId}-${Date.now()}-${index}${ext}`;
+          const uploadResult = await uploadDocument(fileBuffer, fileName);
+
+          // Cleanup local temp file
+          await fs.promises.unlink(file.filepath).catch(() => { });
+
+          return {
+            url: uploadResult.secure_url,
+            publicId: uploadResult.public_id // e.g., "enquiry_system/filename"
+          };
+        } catch (error) {
+          console.error(`Error uploading file ${index}:`, error);
+          return null;
+        }
+      });
+
+      const results = await Promise.all(uploadPromises);
+      submissionFileUrls = results.filter(item => item !== null);
+    }
+
+    // Create assignment response record
+    const response = await AssignmentResponse.create({
+      assignmentId,
+      batchId,
+      enquiryId,
+      submissionNotes: submissionNotes || null,
+      submissionFiles: submissionFileUrls, // Store array of {url, publicId} as JSON
+      status: 'submitted',
+      submittedOn: new Date(),
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Assignment response submitted successfully',
+      data: response,
+    });
+  } catch (error) {
+    console.error('Error in createAssignmentResponse:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+};
+
+/**
+ * GET Student's Assignment Submissions
+ * GET /api/assignment-responses/my-submissions
+ */
+exports.getStudentSubmissions = async (req, res) => {
+  try {
+    const enquiryId = req.enquiry?.enquiryId;
+
+    if (!enquiryId) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const { assignmentId, batchId } = req.query;
+
+    const where = { enquiryId };
+    if (assignmentId) where.assignmentId = assignmentId;
+    if (batchId) where.batchId = batchId;
+
+    const submissions = await AssignmentResponse.findAll({
+      where,
+      include: [
+        {
+          model: Assignment,
+          as: 'assignment',
+          attributes: ['id', 'title', 'description', 'dueDate']
+        },
+        {
+          model: Batch,
+          as: 'batch',
+          attributes: ['id', 'name', 'code']
+        }
+      ],
+      order: [['submittedOn', 'DESC']]
+    });
+
+      const [fields, files] = await form.parse(req);
+      submissionNotes = fields.submissionNotes ? fields.submissionNotes[0] : null;
+
+      const uploadedFiles = files.submissionFiles || [];
+      filesArray = Array.isArray(uploadedFiles) ? uploadedFiles : [uploadedFiles];
+    } else {
+      submissionNotes = req.body.submissionNotes;
+    }
+
+    // Prevent editing if already reviewed
+    if (submission.status === 'reviewed') {
+      return res.status(400).json({ message: 'Cannot edit an assignment that has already been reviewed' });
+    }
+
+    let submissionNotes;
+    let filesArray = [];
     const contentType = req.headers['content-type'] || '';
 
     if (contentType.includes('multipart/form-data')) {
@@ -30,7 +174,6 @@ exports.createAssignmentResponse = async (req, res) => {
         maxFileSize: 10 * 1024 * 1024,
         keepExtensions: true
       });
-
       const [fields, files] = await form.parse(req);
       submissionNotes = fields.submissionNotes ? fields.submissionNotes[0] : null;
 
@@ -44,7 +187,6 @@ exports.createAssignmentResponse = async (req, res) => {
     if (submissionNotes) updateData.submissionNotes = submissionNotes;
 
     // Handle file updates (replaces old files if new ones are provided)
-    // filesArray is already prepared
 
     if (filesArray.length > 0 && filesArray[0] !== undefined) {
       // 1. Delete old files from Cloudinary
@@ -147,8 +289,6 @@ exports.deleteStudentSubmission = async (req, res) => {
     res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 };
-
-
 /**
  * GET All Assignment Responses (Instructors/Admins)
  * GET /api/assignment-responses?assignmentId=X&batchId=Y
