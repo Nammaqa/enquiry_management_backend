@@ -35,6 +35,31 @@ db.StudentPlacementApplied = require('./studentPlacementApplied')(sequelize, Dat
 db.OTP = require('./otp')(sequelize, DataTypes);
 db.BillingPaymentHistory = require('./billingpaymenthistory')(sequelize, DataTypes);
 
+// ONE-TO-ONE: InstructorProfile belongs to its User account
+db.User.hasOne(db.Instructor, {
+	foreignKey: 'userId',
+	as: 'instructorProfile',
+	onDelete: 'CASCADE',
+});
+db.Instructor.belongsTo(db.User, {
+	foreignKey: 'userId',
+	as: 'user',
+});
+
+// MANY-TO-MANY: InstructorProfile <-> Subject through InstructorSubject
+db.Instructor.belongsToMany(db.Subject, {
+	through: db.InstructorSubject,
+	foreignKey: 'instructorId',
+	otherKey: 'subjectId',
+	as: 'subjects',
+});
+db.Subject.belongsToMany(db.Instructor, {
+	through: db.InstructorSubject,
+	foreignKey: 'subjectId',
+	otherKey: 'instructorId',
+	as: 'instructorProfiles',
+});
+
 // ONE-TO-MANY: User has many OTPs
 db.User.hasMany(db.OTP, {
 	foreignKey: 'userId',

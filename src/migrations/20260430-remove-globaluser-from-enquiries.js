@@ -2,8 +2,12 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // Remove globalUser column from enquiries table
-    await queryInterface.removeColumn('enquiries', 'globalUser');
+    try {
+      await queryInterface.removeColumn('enquiries', 'globalUser');
+      console.log('Successfully removed globalUser column');
+    } catch (error) {
+      console.log('Column globalUser might not exist, skipping. Error:', error.message);
+    }
   },
 
   async down(queryInterface, Sequelize) {

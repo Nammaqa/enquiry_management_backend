@@ -6,7 +6,7 @@ const User = db.User;
 const { Formidable } = require('formidable');
 const fs = require('fs').promises;
 const path = require('path');
-const { uploadImage } = require('../utils/cloudinary');
+const { uploadImage, uploadDocument } = require('../utils/cloudinary');
 
 // Create Material by Instructor for their associated batch
 exports.createInstructorMaterial = async (req, res) => {
@@ -73,7 +73,8 @@ exports.createInstructorMaterial = async (req, res) => {
     // Handle file upload
     const file = uploadedFile;
     const fileBuffer = await fs.readFile(file.filepath);
-    const uniqueName = `material-${batchId}-${Date.now()}`;
+    const ext = path.extname(file.originalFilename || file.newFilename || '');
+    const uniqueName = `material-${batchId}-${Date.now()}${ext}`;
 
     // If title is missing, use the original filename
     if (!title) {
@@ -81,7 +82,7 @@ exports.createInstructorMaterial = async (req, res) => {
     }
 
     try {
-      const uploadResult = await uploadImage(fileBuffer, uniqueName);
+      const uploadResult = await uploadDocument(fileBuffer, uniqueName);
       documentUrl = uploadResult.secure_url;
       documentName = file.originalFilename || file.newFilename;
     } catch (uploadError) {
@@ -219,10 +220,11 @@ exports.updateInstructorMaterial = async (req, res) => {
 
     if (uploadedFile) {
       const fileBuffer = await fs.readFile(uploadedFile.filepath);
-      const uniqueName = `material-${material.batchId}-${Date.now()}`;
+      const ext = path.extname(uploadedFile.originalFilename || uploadedFile.newFilename || '');
+      const uniqueName = `material-${material.batchId}-${Date.now()}${ext}`;
 
       try {
-        const uploadResult = await uploadImage(fileBuffer, uniqueName);
+        const uploadResult = await uploadDocument(fileBuffer, uniqueName);
 
         // Note: Old file deletion is skipped as we don't store public_id explicitly
         // and deriving it reliably without storage is risky.

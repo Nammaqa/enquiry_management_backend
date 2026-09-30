@@ -257,11 +257,14 @@ exports.createEnquiry = async (req, res) => {
 
 /**
  * GET all enquiries (ALL ROLES)
+ *
+ * The enquiry list needs both portal-created (global: false) and
+ * management-created (global: true) candidates. The client applies its
+ * candidate-status tab filter after receiving this complete result set.
  */
 exports.getAllEnquiries = async (req, res) => {
   try {
     const enquiries = await Enquiry.findAll({
-      where: { global: true },
       attributes: { exclude: ['password'] },
       include: [
         {
@@ -270,6 +273,29 @@ exports.getAllEnquiries = async (req, res) => {
           attributes: ['id', 'packageCost', 'amountPaid', 'discount', 'balance'],
           required: false,
         },
+        {
+          model: require('../models').Batch,
+          as: 'enrolledBatches',
+          attributes: ['id', 'name', 'sessionStartDate', 'sessionEndDate', 'numberOfStudents', 'status'],
+          through: { attributes: [] },
+          include: [
+            {
+              model: require('../models').Subject,
+              as: 'subject',
+              attributes: ['name']
+            },
+            {
+              model: require('../models').User,
+              as: 'instructor',
+              attributes: ['name']
+            }
+          ]
+        },
+        {
+          model: require('../models').Attendance,
+          as: 'attendances',
+          attributes: ['batchId', 'attendanceCount']
+        }
       ],
       order: [['createdAt', 'DESC']],
     });

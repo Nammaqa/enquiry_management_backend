@@ -4,6 +4,10 @@ const { Op } = require('sequelize');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
 
+const OFFLINE_ATTENDANCE_RADIUS_METERS = Number(process.env.OFFLINE_ATTENDANCE_RADIUS_METERS || 15);
+const OFFLINE_ATTENDANCE_LOCATION_NAME = process.env.OFFLINE_ATTENDANCE_LOCATION_NAME ||
+    '1st Floor, #940, above Skanda Interiors, near Deepa Complex, Papreddy Palya, 2nd Stage, Nagarbhavi, Bengaluru, Karnataka 560072';
+
 // Haversine formula to calculate distance between two points in meters
 function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
     var R = 6371000; // Radius of the earth in m
@@ -91,6 +95,13 @@ exports.generateOfflineQr = async (req, res) => {
             return res.status(400).json({ success: false, message: 'batchId, latitude, and longitude are required' });
         }
 
+        const centerLatitude = Number(latitude);
+        const centerLongitude = Number(longitude);
+        if (!Number.isFinite(centerLatitude) || !Number.isFinite(centerLongitude) ||
+            centerLatitude < -90 || centerLatitude > 90 || centerLongitude < -180 || centerLongitude > 180) {
+            return res.status(400).json({ success: false, message: 'latitude and longitude must be valid coordinates' });
+        }
+
         const batch = await Batch.findByPk(batchId);
         if (!batch) {
             return res.status(404).json({ success: false, message: 'Batch not found' });
@@ -104,13 +115,15 @@ exports.generateOfflineQr = async (req, res) => {
         const qrData = {
             batchId,
             offlineQrId,
-            type: 'offline'
+            type: 'offline',
+            locationName: OFFLINE_ATTENDANCE_LOCATION_NAME,
+            radiusMeters: OFFLINE_ATTENDANCE_RADIUS_METERS
         };
 
         const qrCode = await QRCode.toDataURL(JSON.stringify(qrData));
 
-        batch.latitude = latitude;
-        batch.longitude = longitude;
+        batch.latitude = centerLatitude;
+        batch.longitude = centerLongitude;
         batch.offlineQr = JSON.stringify(qrData);
         await batch.save();
 
@@ -119,8 +132,10 @@ exports.generateOfflineQr = async (req, res) => {
             message: 'Offline QR generated and location set',
             data: {
                 qrCode,
-                latitude,
-                longitude
+                latitude: centerLatitude,
+                longitude: centerLongitude,
+                locationName: OFFLINE_ATTENDANCE_LOCATION_NAME,
+                radiusMeters: OFFLINE_ATTENDANCE_RADIUS_METERS
             }
         });
     } catch (error) {
@@ -133,7 +148,11 @@ exports.generateOfflineQr = async (req, res) => {
 exports.markAttendance = async (req, res) => {
     try {
         const { qrSessionId, latitude, longitude } = req.body;
-        const enquiryId = req.enquiry.enquiryId;
+        const enquiryId = req.enquiry?.enquiryId;
+
+        if (!enquiryId) {
+            return res.status(401).json({ success: false, message: 'Student authentication is required' });
+        }
 
         if (!qrSessionId) {
             return res.status(400).json({ success: false, message: 'qrSessionId is required' });
@@ -194,6 +213,14 @@ exports.markAttendance = async (req, res) => {
             ]
         });
 
+        if (!student) {
+            return res.status(404).json({ success: false, message: 'Student account not found' });
+        }
+
+        if (!['class', 'class qualified'].includes(String(student.candidateStatus || '').toLowerCase())) {
+            return res.status(403).json({ success: false, message: 'Attendance is available only after classroom eligibility is approved.' });
+        }
+
         const isEnrolled = (student.batch && String(student.batch.id) === String(batch.id)) ||
             (student.enrolledBatches && student.enrolledBatches.some(b => String(b.id) === String(batch.id)));
 
@@ -211,13 +238,28 @@ exports.markAttendance = async (req, res) => {
                 return res.status(403).json({ success: false, message: 'You are not registered for offline classes.' });
             }
 
-            if (!latitude || !longitude) {
+            const studentLatitude = Number(latitude);
+            const studentLongitude = Number(longitude);
+            if (!Number.isFinite(studentLatitude) || !Number.isFinite(studentLongitude) ||
+                studentLatitude < -90 || studentLatitude > 90 || studentLongitude < -180 || studentLongitude > 180) {
                 return res.status(400).json({ success: false, message: 'Location (latitude, longitude) is required for offline attendance.' });
             }
 
-            const distance = getDistanceFromLatLonInM(latitude, longitude, batch.latitude, batch.longitude);
-            if (distance > 10) {
-                return res.status(403).json({ success: false, message: `You are too far from the center to mark attendance (${Math.round(distance)} meters away, maximum allowed is 10 meters).` });
+            if (!Number.isFinite(Number(batch.latitude)) || !Number.isFinite(Number(batch.longitude))) {
+                return res.status(409).json({ success: false, message: 'Offline attendance location has not been configured for this batch.' });
+            }
+
+            const distance = getDistanceFromLatLonInM(studentLatitude, studentLongitude, batch.latitude, batch.longitude);
+            if (distance > OFFLINE_ATTENDANCE_RADIUS_METERS) {
+                return res.status(403).json({
+                    success: false,
+                    message: `You are not within the attendance location (${Math.round(distance)} meters away; maximum allowed is ${OFFLINE_ATTENDANCE_RADIUS_METERS} meters).`,
+                    data: {
+                        distanceMeters: Math.round(distance),
+                        radiusMeters: OFFLINE_ATTENDANCE_RADIUS_METERS,
+                        locationName: sessionData.locationName || OFFLINE_ATTENDANCE_LOCATION_NAME
+                    }
+                });
             }
         } else {
             // Student is scanning online QR

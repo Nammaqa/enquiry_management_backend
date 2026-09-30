@@ -517,8 +517,15 @@ exports.login = async (req, res) => {
           name: student.name,
           email: student.email,
           phone_number: student.phone,
+          candidateStatus: student.candidateStatus,
+          batchId: student.batchId,
+          subjectIds: student.subjectIds || [],
+          classroomEligible: ['class', 'class qualified'].includes(student.candidateStatus),
         },
         enquiryId: student.id,
+        candidateStatus: student.candidateStatus,
+        batchId: student.batchId,
+        classroomEligible: ['class', 'class qualified'].includes(student.candidateStatus),
       });
     }
 
@@ -589,8 +596,15 @@ exports.login = async (req, res) => {
           name: student.name,
           email: student.email,
           phone_number: student.phone,
+          candidateStatus: student.candidateStatus,
+          batchId: student.batchId,
+          subjectIds: student.subjectIds || [],
+          classroomEligible: ['class', 'class qualified'].includes(student.candidateStatus),
         },
         enquiryId: student.id,
+        candidateStatus: student.candidateStatus,
+        batchId: student.batchId,
+        classroomEligible: ['class', 'class qualified'].includes(student.candidateStatus),
       });
     }
 
@@ -637,6 +651,12 @@ exports.checkStudentExists = async (req, res) => {
         name: user ? user.name : student.name,
         email: user ? user.email : student.email,
         phone_number: user ? user.phone_number : student.phone,
+        ...(student ? {
+          candidateStatus: student.candidateStatus,
+          batchId: student.batchId,
+          subjectIds: student.subjectIds || [],
+          classroomEligible: ['class', 'class qualified'].includes(student.candidateStatus),
+        } : {}),
       };
 
       return res.status(200).json({
@@ -646,6 +666,11 @@ exports.checkStudentExists = async (req, res) => {
         role: user ? user.role : 'student',
         account,
         student: account,
+        ...(student ? {
+          candidateStatus: student.candidateStatus,
+          batchId: student.batchId,
+          classroomEligible: ['class', 'class qualified'].includes(student.candidateStatus),
+        } : {}),
       });
     } else {
       return res.status(200).json({

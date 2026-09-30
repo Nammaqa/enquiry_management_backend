@@ -2,6 +2,18 @@ const express = require('express');
 const router = express.Router();
 const assignmentResponseController = require('../controllers/assignmentresponse.controller');
 const enquiryAuth = require('../middlewares/enquiryAuth.middleware');
+const sharedAuth = require('../middlewares/sharedAuth.middleware');
+
+/**
+ * @route   GET /api/assignment-responses
+ * @desc    Get all responses for a given assignment/batch. Students only see their own.
+ * @access  Private (System User or Student JWT)
+ */
+router.get(
+  '/',
+  sharedAuth,
+  assignmentResponseController.getAllResponses
+);
 
 /**
  * @route   POST /api/assignment-responses

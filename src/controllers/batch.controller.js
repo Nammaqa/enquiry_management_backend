@@ -26,8 +26,18 @@ exports.createBatch = async (req, res) => {
     const instructorId = fields.instructorId ? parseInt(extractField(fields.instructorId)) : null;
     const imageFile = files.image ? (Array.isArray(files.image) ? files.image[0] : files.image) : null;
 
-    const userId = req.user.id;  // From authenticated User
-    const userRole = req.user.role;  // Role validation
+    const parseDateField = (value) => {
+      if (!value) return null;
+
+      const parsedDate = new Date(value);
+      return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+    };
+
+    const parsedSessionStartDate = parseDateField(sessionStartDate);
+    const parsedSessionEndDate = parseDateField(sessionEndDate);
+
+    const userId = req.user.userId || req.user.id;  // From authenticated User
+    const userRole = String(req.user.role || '').toUpperCase();  // Role validation
 
     // Only ADMIN, COUNSELLOR, and INSTRUCTOR can create batches
     if (userRole !== 'ADMIN' && userRole !== 'COUNSELLOR' && userRole !== 'INSTRUCTOR') {
@@ -42,6 +52,20 @@ exports.createBatch = async (req, res) => {
     if (!name || !code || !sessionStartDate || !sessionTime || !subjectId) {
       return res.status(400).json({
         message: 'name, code, subjectId, sessionStartDate, and sessionTime are required',
+      });
+    }
+
+    if (!parsedSessionStartDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'sessionStartDate must be a valid date in YYYY-MM-DD or ISO format',
+      });
+    }
+
+    if (sessionEndDate && !parsedSessionEndDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'sessionEndDate must be a valid date in YYYY-MM-DD or ISO format',
       });
     }
 
@@ -78,8 +102,8 @@ exports.createBatch = async (req, res) => {
     const batch = await Batch.create({
       name,
       code,
-      sessionStartDate,
-      sessionEndDate: sessionEndDate || null,
+      sessionStartDate: parsedSessionStartDate,
+      sessionEndDate: parsedSessionEndDate,
       sessionTime,
       sessionLink: sessionLink || null,
       sessionQr: null, // Will be generated after batch is created
@@ -146,7 +170,7 @@ exports.createBatch = async (req, res) => {
 // Get available batches for instructor (created by admin/counsellor)
 exports.getAvailableBatches = async (req, res) => {
   try {
-    const userRole = req.user.role;
+    const userRole = String(req.user.role || '').toUpperCase();
 
     // Only instructors can view available batches
     if (userRole !== 'INSTRUCTOR') {
@@ -175,7 +199,28 @@ exports.getAvailableBatches = async (req, res) => {
       order: [['createdAt', 'DESC']],
     });
 
-    res.status(200).json({
+    
+      const batchData = batch.toJSON();
+      if (batchData.enrolledStudents) {
+        batchData.enrolledStudents = batchData.enrolledStudents.map(student => {
+          let paymentStatus = 'not paid';
+          if (student.billing) {
+            const amountPaid = parseFloat(student.billing.amountPaid || 0);
+            const balance = parseFloat(student.billing.balance || 0);
+            const packageCost = parseFloat(student.billing.packageCost || 0);
+            if (balance === 0 || amountPaid >= packageCost) {
+              paymentStatus = 'fully paid';
+            } else if (amountPaid > 0 && balance > 0) {
+              paymentStatus = 'partially paid';
+            }
+          }
+          return {
+            ...student,
+            paymentStatus
+          };
+        });
+      }
+      res.status(200).json({
       success: true,
       message: 'Available batches created by Admin/Counsellor',
       total: batches.length,
@@ -190,18 +235,16 @@ exports.getAvailableBatches = async (req, res) => {
 // Get all batches (with filtering for instructors)
 exports.getBatches = async (req, res) => {
   try {
-    const userRole = req.user.role;
-    const userId = req.user.id;
+    const userRole = String(req.user.role || '').toUpperCase();
+    const userId = req.user.userId || req.user.id;
     let batches;
 
-    // Instructors can only see their own batches and approved batches
+    // Instructors can only see approved batches assigned to their user account.
     if (userRole === 'INSTRUCTOR') {
       batches = await Batch.findAll({
         where: {
-          [db.Sequelize.Op.or]: [
-            { createdBy: userId }, // their own batches
-            { approvalStatus: 'approved' }, // approved batches
-          ],
+          instructorId: userId,
+          approvalStatus: 'approved',
         },
         attributes: { include: ['sessionQr'] },
         include: [
@@ -244,10 +287,34 @@ exports.getBatches = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    let batchesWithCount = [];
+
+    if (batches.length > 0) {
+      const batchIds = batches.map(b => b.id);
+      // Fetch all enrollments for these batches
+      const enrollments = await db.BatchStudent.findAll({
+        attributes: ['batchId'],
+        where: { batchId: batchIds },
+        raw: true
+      });
+
+      // Count them manually in JS to avoid SQL dialect issues with group/count
+      const enrollmentMap = {};
+      enrollments.forEach(e => {
+        enrollmentMap[e.batchId] = (enrollmentMap[e.batchId] || 0) + 1;
+      });
+
+      batchesWithCount = batches.map(b => {
+        const batchObj = b.toJSON();
+        batchObj.enrolledCount = enrollmentMap[b.id] || 0;
+        return batchObj;
+      });
+    }
+
     res.status(200).json({
       success: true,
       total: batches.length,
-      data: batches,
+      data: batchesWithCount,
     });
   } catch (error) {
     console.error('Error in getBatches:', error);
@@ -259,8 +326,8 @@ exports.getBatches = async (req, res) => {
 exports.getBatchById = async (req, res) => {
   try {
     const { batchId } = req.params;
-    const userId = req.user.id;
-    const userRole = req.user.role;
+    const userId = req.user.userId || req.user.id;
+    const userRole = String(req.user.role || '').toUpperCase();
 
     const batch = await Batch.findByPk(batchId, {
       attributes: { include: ['sessionQr'] },
@@ -319,6 +386,13 @@ exports.getBatchDetails = async (req, res) => {
           model: db.Enquiry,
           as: 'enrolledStudents',
           attributes: ['id', 'name', 'email', 'phone', 'candidateStatus'],
+            include: [{
+              model: db.Billing,
+              as: 'billing',
+              attributes: ['id', 'packageCost', 'amountPaid', 'discount', 'balance'],
+              required: false
+            }],
+            
           through: { attributes: [] } // Hide junction table fields
         }
       ]
@@ -328,9 +402,30 @@ exports.getBatchDetails = async (req, res) => {
       return res.status(404).json({ message: 'Batch not found' });
     }
 
+    const batchData = batch.toJSON();
+    if (batchData.enrolledStudents) {
+      batchData.enrolledStudents = batchData.enrolledStudents.map(student => {
+        let paymentStatus = 'not paid';
+        if (student.billing) {
+          const amountPaid = parseFloat(student.billing.amountPaid || 0);
+          const balance = parseFloat(student.billing.balance || 0);
+          const packageCost = parseFloat(student.billing.packageCost || 0);
+          if (balance === 0 || amountPaid >= packageCost) {
+            paymentStatus = 'fully paid';
+          } else if (amountPaid > 0 && balance > 0) {
+            paymentStatus = 'partially paid';
+          }
+        }
+        return {
+          ...student,
+          paymentStatus
+        };
+      });
+    }
+
     res.status(200).json({
       success: true,
-      data: batch
+      data: batchData
     });
   } catch (error) {
     console.error('Error in getBatchDetails:', error);
@@ -368,8 +463,8 @@ exports.updateBatch = async (req, res) => {
     const approvalStatus = fields.approvalStatus ? fields.approvalStatus[0] : null;
     const imageFile = files.image ? files.image[0] : null;
 
-    const userId = req.user.id;
-    const userRole = req.user.role;
+    const userId = req.user.userId || req.user.id;
+    const userRole = String(req.user.role || '').toUpperCase();
 
     const batch = await Batch.findByPk(batchId);
 
@@ -480,7 +575,7 @@ exports.updateApprovalStatus = async (req, res) => {
   try {
     const { batchId } = req.params;
     const { approvalStatus } = req.body;
-    const userRole = req.user.role;
+    const userRole = String(req.user.role || '').toUpperCase();
 
     if (userRole !== 'ADMIN' && userRole !== 'COUNSELLOR') {
       return res.status(403).json({ message: 'Only Admin and Counsellor can approve/reject batches' });
@@ -584,7 +679,7 @@ exports.addStudentstoBatch = async (req, res) => {
 exports.getBatchesBySubject = async (req, res) => {
   try {
     console.log('getBatchesBySubject called with user:', req.user);
-    const instructorId = req.user.userId; // from token
+    const instructorId = req.user.userId || req.user.id; // from token
     const { subjectId } = req.params; // from URL
 
     if (!subjectId) {
@@ -642,7 +737,7 @@ exports.getBatchesBySubject = async (req, res) => {
 // Get all subjects for the logged-in instructor
 exports.getInstructorSubjects = async (req, res) => {
   try {
-    const instructorId = req.user.id; // from token
+    const instructorId = req.user.userId || req.user.id; // from token
 
     const subjects = await db.Subject.findAll({
       include: [{
@@ -666,21 +761,22 @@ exports.getInstructorSubjects = async (req, res) => {
   }
 };
 
-// Get all students for enrollment (status 'class' or 'class qualified')
+// Get all students for enrollment, regardless of their candidate status.
 exports.getBatchStudentsforEnrollment = async (req, res) => {
   try {
     const students = await db.Enquiry.findAll({
-      where: {
-        candidateStatus: {
-          [db.Sequelize.Op.in]: ['class', 'class qualified']
-        }
-      },
       attributes: ['id', 'name', 'email', 'phone', 'candidateStatus', 'packageId'],
       include: [
+          {
+            model: db.Billing,
+            as: 'billing',
+            attributes: ['id', 'packageCost', 'amountPaid', 'discount', 'balance'],
+            required: false
+          },
         {
           model: db.Batch,
           as: 'enrolledBatches',
-          attributes: ['id', 'name'],
+          attributes: ['id', 'name', 'code'],
           through: { attributes: [] },
           required: false
         },
@@ -707,7 +803,20 @@ exports.getBatchStudentsforEnrollment = async (req, res) => {
     const formattedStudents = students.map(student => {
       const studentData = student.toJSON();
 
-      return {
+      
+        let paymentStatus = 'not paid';
+        if (studentData.billing) {
+          const amountPaid = parseFloat(studentData.billing.amountPaid || 0);
+          const balance = parseFloat(studentData.billing.balance || 0);
+          const packageCost = parseFloat(studentData.billing.packageCost || 0);
+          if (balance === 0 || amountPaid >= packageCost) {
+            paymentStatus = 'fully paid';
+          } else if (amountPaid > 0 && balance > 0) {
+            paymentStatus = 'partially paid';
+          }
+        }
+        return {
+          paymentStatus,
         id: studentData.id,
         name: studentData.name,
         email: studentData.email,
@@ -739,8 +848,8 @@ exports.getBatchStudentsforEnrollment = async (req, res) => {
 exports.deleteBatch = async (req, res) => {
   try {
     const { batchId } = req.params;
-    const userId = req.user.id;
-    const userRole = req.user.role;
+    const userId = req.user.userId || req.user.id;
+    const userRole = String(req.user.role || '').toUpperCase();
 
     // Only admin/counsellor can delete batches
     if (userRole !== 'ADMIN' && userRole !== 'COUNSELLOR') {
@@ -769,3 +878,95 @@ exports.deleteBatch = async (req, res) => {
   }
 };
 
+exports.removeStudentFromBatch = async (req, res) => {
+  try {
+    const { batchId, studentId } = req.body;
+
+    if (!batchId || !studentId) {
+      return res.status(400).json({ message: 'batchId and studentId are required' });
+    }
+
+    const db = require('../models');
+    
+    const deletedCount = await db.BatchStudent.destroy({
+      where: {
+        batchId,
+        enquiryId: studentId
+      }
+    });
+
+    if (deletedCount === 0) {
+      return res.status(404).json({ message: 'Student is not enrolled in this batch' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Student removed from batch successfully'
+    });
+  } catch (error) {
+    console.error('Error removing student from batch:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getStudentBatchEnrollments = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const db = require('../models');
+
+    const batchStudents = await db.BatchStudent.findAll({
+      where: { enquiryId: studentId },
+      include: [
+        {
+          model: db.Batch,
+          as: 'batch',
+          attributes: ['id', 'name', 'sessionStartDate', 'sessionEndDate', 'numberOfStudents', 'status'],
+          include: [
+            {
+              model: db.Subject,
+              as: 'subject',
+              attributes: ['name']
+            },
+            {
+              model: db.User,
+              as: 'instructor',
+              attributes: ['name']
+            }
+          ]
+        }
+      ]
+    });
+
+    const attendances = await db.Attendance.findAll({
+      where: { enquiryId: studentId }
+    });
+
+    // Format the response
+    const formattedData = batchStudents.map(bs => {
+      const batch = bs.batch || bs.Batch;
+      if (!batch) return null;
+      
+      const batchObj = batch.toJSON ? batch.toJSON() : batch;
+      const attendance = attendances.find(a => a.batchId === batchObj.id);
+      
+      return {
+        batchId: batchObj.id,
+        batchName: batchObj.name,
+        subjectName: batchObj.subject?.name || batchObj.Subject?.name || 'N/A',
+        instructorName: batchObj.instructor?.name || batchObj.Instructor?.name || 'N/A',
+        startDate: batchObj.sessionStartDate,
+        endDate: batchObj.sessionEndDate,
+        numberOfClassesTaken: batchObj.numberOfStudents || 0, // In previous logic numberOfStudents might mean total classes, wait, no. Total classes is not tracked in batch directly. We will use numberOfStudents as placeholder for total classes if requested, but let's just return what we have.
+        attendanceCount: attendance ? attendance.attendanceCount : 0,
+      };
+    }).filter(Boolean);
+
+    res.status(200).json({
+      success: true,
+      data: formattedData
+    });
+  } catch (error) {
+    console.error('Error fetching student batch enrollments:', error);
+    res.status(500).json({ message: error.message });
+  }
+};

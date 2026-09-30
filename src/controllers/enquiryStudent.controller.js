@@ -11,6 +11,7 @@ const User = db.User;
 const Assignment = db.Assignment;
 const Material = db.Material;
 const MockInterview = db.MockInterview;
+const BatchStudent = db.BatchStudent;
 const sequelize = db.sequelize;
 
 const validateAlphabetsOnly = (value, fieldName) => {
@@ -161,6 +162,11 @@ exports.enquiryStudentLogin = async (req, res) => {
       token,
       name: enquiry.name,
       email: enquiry.email,
+      enquiryId: enquiry.id,
+      candidateStatus: enquiry.candidateStatus,
+      batchId: enquiry.batchId,
+      subjectIds: enquiry.subjectIds || [],
+      classroomEligible: ['class', 'class qualified'].includes(enquiry.candidateStatus),
     });
   } catch (error) {
     console.error('Error in enquiryStudentLogin:', error);
@@ -180,14 +186,26 @@ exports.validateToken = async (req, res) => {
       return res.status(401).json({ message: 'Invalid token' });
     }
 
+    const student = await Enquiry.findByPk(enquiry.enquiryId, {
+      attributes: ['id', 'name', 'email', 'candidateStatus', 'batchId', 'subjectIds'],
+    });
+
+    if (!student) {
+      return res.status(401).json({ message: 'Student account not found' });
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Token is valid',
       enquiry: {
-        enquiryId: enquiry.enquiryId,
-        name: enquiry.name,
-        email: enquiry.email,
+        enquiryId: student.id,
+        name: student.name,
+        email: student.email,
         role: enquiry.role,
+        candidateStatus: student.candidateStatus,
+        batchId: student.batchId,
+        subjectIds: student.subjectIds || [],
+        classroomEligible: ['class', 'class qualified'].includes(student.candidateStatus),
       }
     });
   } catch (error) {
@@ -236,6 +254,7 @@ exports.getStudentClassroom = async (req, res) => {
           include: [
             {
               model: Subject,
+              as: 'subjects',
               through: { attributes: [] },
               attributes: ['id', 'name', 'code']
             }
@@ -280,8 +299,8 @@ exports.getStudentClassroom = async (req, res) => {
         packageId: enquiry.packageId,
         packageName: enquiry.package.name,
         packageImage: enquiry.package.image,
-        packageSubjects: enquiry.package.Subjects || [],
-        totalPackageSubjects: enquiry.package.Subjects?.length || 0
+        packageSubjects: enquiry.package.subjects || [],
+        totalPackageSubjects: enquiry.package.subjects?.length || 0
       };
     }
 
@@ -320,7 +339,14 @@ exports.getStudentClassroom = async (req, res) => {
       };
     }
 
-    // Prepare batch info with instructor
+    const batchStudent = enquiry.batchId
+      ? await BatchStudent.findOne({
+          where: { batchId: enquiry.batchId, enquiryId },
+          attributes: ['mode']
+        })
+      : null;
+
+    // Prepare batch info with instructor and attendance configuration
     const batchInfo = enquiry.batch ? {
       id: enquiry.batch.id,
       name: enquiry.batch.name,
@@ -329,6 +355,10 @@ exports.getStudentClassroom = async (req, res) => {
       timing: enquiry.batch.sessionTime,
       sessionLink: enquiry.batch.sessionLink,
       totalStudents: enquiry.batch.numberOfStudents,
+      mode: batchStudent?.mode || 'online',
+      latitude: enquiry.batch.latitude,
+      longitude: enquiry.batch.longitude,
+      radiusMeters: 15,
       subject: enquiry.batch.subject,
       instructor: enquiry.batch.creator
     } : null;
@@ -345,7 +375,7 @@ exports.getStudentClassroom = async (req, res) => {
       // Fetch assignments for this batch
       const assignments = await Assignment.findAll({
         where: { batchId: enquiry.batchId },
-        attributes: ['id', 'title', 'description', 'dueDate', 'createdDate', 'submissionFile'],
+        attributes: ['id', 'title', 'description', 'assignmentFile', 'dueDate', 'createdDate'],
         include: [
           {
             model: User,
