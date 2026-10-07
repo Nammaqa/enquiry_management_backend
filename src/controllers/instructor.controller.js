@@ -352,7 +352,7 @@ exports.getAllInstructorsProfiles = async (req, res) => {
 
         // Count assignments
         const assignmentsCount = await Assignment.count({
-          where: { instructorId: instructor.userId }
+          where: { createdBy: instructor.userId }
         });
 
         // Count mock interviews
@@ -442,7 +442,7 @@ exports.updateInstructorProfile = async (req, res) => {
     });
 
     const assignmentsCount = await Assignment.count({
-      where: { instructorId }
+      where: { createdBy: instructorId }
     });
 
     const mockInterviewsCount = await MockInterview.count({
