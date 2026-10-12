@@ -410,26 +410,53 @@ exports.updateInstructorProfile = async (req, res) => {
     const { instructorId } = req.params;
     const { name, description, image } = req.body;
 
-    // Find instructor
-    const instructor = await Instructor.findOne({
+    const user = await User.findByPk(instructorId, {
+      attributes: ['id', 'name', 'email', 'role']
+    });
+
+    // Find instructor by userId or id
+    let instructor = await Instructor.findOne({
       where: { userId: instructorId }
     });
+
+    if (!instructor && !user) {
+      instructor = await Instructor.findByPk(instructorId);
+    }
+
+    if (!instructor && user) {
+      instructor = await Instructor.create({
+        userId: user.id,
+        name: user.name
+      });
+    }
 
     if (!instructor) {
       return res.status(404).json({ message: 'Instructor not found' });
     }
 
+    const targetUserId = instructor.userId || (user ? user.id : instructorId);
+
     // Update profile fields
-    if (name) instructor.name = name;
-    if (description) instructor.description = description;
-    if (image) instructor.image = image;
+    if (name) {
+      instructor.name = name;
+      await User.update({ name }, { where: { id: targetUserId } });
+    }
+    if (description !== undefined) instructor.description = description;
+    if (image !== undefined) instructor.image = image;
 
     await instructor.save();
 
-    // Fetch updated profile with stats
-    const subjectsCount = await Instructor.count({
-      where: { userId: instructorId }
+    // Fetch subjects assigned to instructor
+    const instructorSubjects = await Subject.findAll({
+      include: [{
+        model: User,
+        as: 'instructors',
+        where: { id: targetUserId },
+        attributes: [],
+      }],
+      attributes: ['id', 'name', 'code'],
     });
+    const subjectsCount = instructorSubjects.length;
 
     const studentsCount = await sequelize.query(`
       SELECT COUNT(DISTINCT e.id) as total_students
@@ -437,16 +464,16 @@ exports.updateInstructorProfile = async (req, res) => {
       INNER JOIN batches b ON e."batchId" = b.id
       WHERE b."instructorId" = :userId
     `, {
-      replacements: { userId: instructorId },
+      replacements: { userId: targetUserId },
       type: sequelize.QueryTypes.SELECT
     });
 
     const assignmentsCount = await Assignment.count({
-      where: { createdBy: instructorId }
+      where: { createdBy: targetUserId }
     });
 
     const mockInterviewsCount = await MockInterview.count({
-      where: { instructorId }
+      where: { instructorId: targetUserId }
     });
 
     const feedbackStats = await sequelize.query(`
@@ -456,33 +483,24 @@ exports.updateInstructorProfile = async (req, res) => {
       FROM feedbacks
       WHERE "instructorId" = :instructorId
     `, {
-      replacements: { instructorId },
+      replacements: { instructorId: targetUserId },
       type: sequelize.QueryTypes.SELECT
     });
 
-    const updatedInstructor = await Instructor.findOne({
-      where: { userId: instructorId },
-      include: [{
-        model: User,
-        as: 'user',
-        attributes: ['id', 'name', 'email']
-      }, {
-        model: Subject,
-        through: { attributes: [] },
-        attributes: ['id', 'name', 'code']
-      }]
+    const updatedUser = await User.findByPk(targetUserId, {
+      attributes: ['id', 'name', 'email']
     });
 
     res.status(200).json({
       success: true,
       message: 'Instructor profile updated successfully',
       data: {
-        id: updatedInstructor.id,
-        userId: updatedInstructor.userId,
-        name: updatedInstructor.name || updatedInstructor.User?.name,
-        email: updatedInstructor.User?.email,
-        image: updatedInstructor.image,
-        description: updatedInstructor.description,
+        id: instructor.id,
+        userId: targetUserId,
+        name: instructor.name || updatedUser?.name,
+        email: updatedUser?.email,
+        image: instructor.image,
+        description: instructor.description,
         stats: {
           subjectsCount,
           studentsCount: parseInt(studentsCount[0]?.total_students || 0),
@@ -491,7 +509,7 @@ exports.updateInstructorProfile = async (req, res) => {
           averageRating: parseFloat(feedbackStats[0]?.average_rating || 0),
           totalFeedbacks: parseInt(feedbackStats[0]?.total_feedbacks || 0)
         },
-        subjects: updatedInstructor.subjects || []
+        subjects: instructorSubjects
       }
     });
   } catch (error) {
