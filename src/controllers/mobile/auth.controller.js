@@ -1,9 +1,12 @@
 const { Enquiry, User, OTP } = require('../../models');
+const { Op } = require('sequelize');
 const { hashPassword, comparePassword } = require('../../utils/password');
 const { signToken } = require('../../config/jwt');
 const { generateOTP, sendOTPViaSMS } = require('../../utils/otp');
+const { sendOTPViaEmail } = require('../../utils/mailer');
 
 const getPhoneCandidates = (phone) => {
+  if (!phone) return [];
   const digits = String(phone).replace(/\D/g, '');
   const candidates = [String(phone), digits];
 
@@ -40,12 +43,14 @@ exports.signup = async (req, res) => {
       });
     }
 
+    const normalizedEmail = String(email).trim().toLowerCase();
+
     // Check if phone already exists (primary identifier for mobile signup)
     let student = await Enquiry.findOne({ where: { phone: phone_number } });
 
     if (!student) {
       // Also check if email exists to prevent duplicate accounts
-      const existingEmail = await Enquiry.findOne({ where: { email } });
+      const existingEmail = await Enquiry.findOne({ where: { email: normalizedEmail } });
       if (existingEmail) {
         return res.status(400).json({
           message: 'Email already registered with a different phone number',
@@ -57,7 +62,7 @@ exports.signup = async (req, res) => {
 
       student = await Enquiry.create({
         name: fullName,
-        email,
+        email: normalizedEmail,
         phone: phone_number,
         password: hashedPassword,
         candidateStatus: 'enquiry stage',
@@ -73,9 +78,17 @@ exports.signup = async (req, res) => {
     const otpCode = generateOTP();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Delete any existing OTP for this phone
+    // Delete any existing OTP for this phone or email
     try {
-      await OTP.destroy({ where: { phone_number } });
+      await OTP.destroy({
+        where: {
+          [Op.or]: [
+            { phone_number },
+            { email: normalizedEmail },
+            { userId: student.id },
+          ],
+        },
+      });
     } catch (err) {
       console.error('Error deleting old OTP:', err.message);
     }
@@ -83,7 +96,7 @@ exports.signup = async (req, res) => {
     // Save OTP to database
     const otpRecord = await OTP.create({
       userId: student.id,
-      email,
+      email: normalizedEmail,
       phone_number,
       fullName,
       otp_code: otpCode,
@@ -91,18 +104,55 @@ exports.signup = async (req, res) => {
       expires_at: expiresAt,
     });
 
-    // Send OTP via SMS
-    const smsResult = await sendOTPViaSMS(phone_number, otpCode);
+    // Send OTP via Email and SMS
+    let emailSent = false;
+    let smsSent = false;
+    let emailError = null;
+    let smsError = null;
 
-    if (!smsResult.success) {
+    try {
+      const emailResult = await sendOTPViaEmail({
+        to: normalizedEmail,
+        otpCode,
+        fullName,
+        purpose: 'signup',
+      });
+      emailSent = emailResult.success;
+      if (!emailResult.success) {
+        emailError = emailResult.error;
+      }
+    } catch (err) {
+      emailError = err.message;
+      console.error('Email sending exception:', err.message);
+    }
+
+    try {
+      const smsResult = await sendOTPViaSMS(phone_number, otpCode);
+      smsSent = smsResult.success;
+      if (!smsResult.success) {
+        smsError = smsResult.error;
+      }
+    } catch (err) {
+      smsError = err.message;
+      console.error('SMS sending exception:', err.message);
+    }
+
+    // If both failed, return an error
+    if (!emailSent && !smsSent) {
       return res.status(500).json({
-        message: 'Failed to send OTP',
-        error: smsResult.error,
+        message: 'Failed to deliver OTP via email or SMS',
+        emailError,
+        smsError,
       });
     }
 
+    const deliveredChannels = [];
+    if (emailSent) deliveredChannels.push('email');
+    if (smsSent) deliveredChannels.push('phone');
+
     return res.status(200).json({
-      message: 'OTP sent successfully to your phone',
+      message: `OTP sent successfully to your ${deliveredChannels.join(' and ')}`,
+      deliveredTo: deliveredChannels,
       student: {
         id: student.id,
         name: student.name,
@@ -125,18 +175,40 @@ exports.signup = async (req, res) => {
 
 exports.verifyOTP = async (req, res) => {
   try {
-    const { student_id, phone_number, otp_code } = req.body;
+    const { student_id, phone_number, email, otp_code } = req.body;
 
     // Validate required fields
-    if (!student_id || !phone_number || !otp_code) {
+    if (!otp_code) {
       return res.status(400).json({
-        message: 'student_id, phone_number, and otp_code are required',
+        message: 'otp_code is required',
       });
+    }
+
+    if (!student_id && !phone_number && !email) {
+      return res.status(400).json({
+        message: 'At least one identifier (student_id, phone_number, or email) is required along with otp_code',
+      });
+    }
+
+    const orConditions = [];
+    if (student_id) {
+      orConditions.push({ userId: student_id });
+    }
+    if (phone_number) {
+      const candidates = getPhoneCandidates(phone_number);
+      orConditions.push({ phone_number: { [Op.in]: candidates } });
+    }
+    if (email) {
+      orConditions.push({ email: String(email).trim().toLowerCase() });
     }
 
     // Find OTP record
     const otpRecord = await OTP.findOne({
-      where: { userId: student_id, phone_number, otp_code },
+      where: {
+        otp_code: String(otp_code).trim(),
+        [Op.or]: orConditions,
+      },
+      order: [['createdAt', 'DESC']],
     });
 
     if (!otpRecord) {
@@ -160,8 +232,22 @@ exports.verifyOTP = async (req, res) => {
     }
 
     // Find student from Enquiry table
-    const student = await Enquiry.findByPk(student_id);
-    
+    let student = null;
+    if (student_id) {
+      student = await Enquiry.findByPk(student_id);
+    }
+    if (!student && otpRecord.userId) {
+      student = await Enquiry.findByPk(otpRecord.userId);
+    }
+    if (!student && (email || otpRecord.email)) {
+      const searchEmail = (email || otpRecord.email).trim().toLowerCase();
+      student = await Enquiry.findOne({ where: { email: searchEmail } });
+    }
+    if (!student && (phone_number || otpRecord.phone_number)) {
+      const candidates = getPhoneCandidates(phone_number || otpRecord.phone_number);
+      student = await Enquiry.findOne({ where: { phone: { [Op.in]: candidates } } });
+    }
+
     if (!student) {
       return res.status(404).json({
         message: 'Student not found',
@@ -193,6 +279,10 @@ exports.verifyOTP = async (req, res) => {
         name: student.name,
         email: student.email,
         phone_number: student.phone,
+        candidateStatus: student.candidateStatus,
+        batchId: student.batchId,
+        subjectIds: student.subjectIds || [],
+        classroomEligible: ['class', 'class qualified'].includes(student.candidateStatus),
       },
       enquiryId: student.id,
     });
@@ -207,74 +297,117 @@ exports.verifyOTP = async (req, res) => {
 
 exports.resendSignupOTP = async (req, res) => {
   try {
-    const { student_id, phone_number } = req.body;
+    const { student_id, phone_number, email } = req.body;
 
     // Validate required fields
-    if (!student_id || !phone_number) {
+    if (!student_id && !phone_number && !email) {
       return res.status(400).json({
-        message: 'student_id and phone_number are required',
+        message: 'At least one identifier (student_id, phone_number, or email) is required',
       });
     }
 
     // Verify student exists
-    const student = await Enquiry.findByPk(student_id);
+    let student = null;
+    if (student_id) {
+      student = await Enquiry.findByPk(student_id);
+    }
+    if (!student && email) {
+      student = await Enquiry.findOne({ where: { email: String(email).trim().toLowerCase() } });
+    }
+    if (!student && phone_number) {
+      const candidates = getPhoneCandidates(phone_number);
+      student = await Enquiry.findOne({ where: { phone: { [Op.in]: candidates } } });
+    }
+
     if (!student) {
       return res.status(404).json({
         message: 'Student not found',
       });
     }
 
-    // Verify phone number matches student's phone
-    if (student.phone !== phone_number) {
-      return res.status(400).json({
-        message: 'Phone number does not match student account',
-      });
-    }
-
-    // Find existing OTP record
-    const existingOTP = await OTP.findOne({ where: { userId: student_id, phone_number } });
-    if (!existingOTP) {
-      return res.status(404).json({
-        message: 'No pending OTP found for this student and phone number',
-      });
-    }
+    const targetEmail = (email || student.email || '').trim().toLowerCase();
+    const targetPhone = phone_number || student.phone;
 
     // Generate new OTP
     const otpCode = generateOTP();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Update OTP with new code
+    // Delete existing OTPs
     try {
-      await OTP.update(
-        {
-          otp_code: otpCode,
-          is_verified: false,
-          expires_at: expiresAt,
+      await OTP.destroy({
+        where: {
+          [Op.or]: [
+            { userId: student.id },
+            ...(targetPhone ? [{ phone_number: targetPhone }] : []),
+            ...(targetEmail ? [{ email: targetEmail }] : []),
+          ],
         },
-        { where: { phone_number } }
-      );
+      });
     } catch (err) {
-      console.error('Error updating OTP:', err.message);
+      console.error('Error cleaning old OTP:', err.message);
+    }
+
+    // Create new OTP record
+    const otpRecord = await OTP.create({
+      userId: student.id,
+      email: targetEmail,
+      phone_number: targetPhone || '',
+      fullName: student.name,
+      otp_code: otpCode,
+      is_verified: false,
+      expires_at: expiresAt,
+    });
+
+    // Send OTP via Email and/or SMS
+    let emailSent = false;
+    let smsSent = false;
+    let emailError = null;
+    let smsError = null;
+
+    if (targetEmail) {
+      try {
+        const emailResult = await sendOTPViaEmail({
+          to: targetEmail,
+          otpCode,
+          fullName: student.name,
+          purpose: 'signup',
+        });
+        emailSent = emailResult.success;
+        if (!emailResult.success) emailError = emailResult.error;
+      } catch (err) {
+        emailError = err.message;
+      }
+    }
+
+    if (targetPhone) {
+      try {
+        const smsResult = await sendOTPViaSMS(targetPhone, otpCode);
+        smsSent = smsResult.success;
+        if (!smsResult.success) smsError = smsResult.error;
+      } catch (err) {
+        smsError = err.message;
+      }
+    }
+
+    if (!emailSent && !smsSent) {
       return res.status(500).json({
-        message: 'Failed to update OTP record',
-        error: err.message,
+        message: 'Failed to resend OTP via email or SMS',
+        emailError,
+        smsError,
       });
     }
 
-    // Send OTP via SMS
-    const smsResult = await sendOTPViaSMS(phone_number, otpCode);
-
-    if (!smsResult.success) {
-      return res.status(500).json({
-        message: 'Failed to send OTP',
-        error: smsResult.error,
-      });
-    }
+    const deliveredChannels = [];
+    if (emailSent) deliveredChannels.push('email');
+    if (smsSent) deliveredChannels.push('phone');
 
     return res.status(200).json({
-      message: 'OTP resent successfully to your phone',
+      message: `OTP resent successfully to your ${deliveredChannels.join(' and ')}`,
+      deliveredTo: deliveredChannels,
       data: {
-        phone_number,
+        student_id: student.id,
+        email: targetEmail,
+        phone_number: targetPhone,
       },
       expiresIn: '10 minutes',
       next: 'Verify OTP using /api/mobile/auth/verify-otp endpoint',
@@ -290,41 +423,62 @@ exports.resendSignupOTP = async (req, res) => {
 
 exports.sendLoginOTP = async (req, res) => {
   try {
-    const { phone_number } = req.body;
+    const { phone_number, email } = req.body;
 
     // Validate required fields
-    if (!phone_number) {
+    if (!phone_number && !email) {
       return res.status(400).json({
-        message: 'Phone number is required',
+        message: 'Phone number or email is required',
       });
     }
 
-    // Instructors are system users; students are enquiry records.
-    const user = await User.findOne({ where: { phone_number } });
-    const student = user ? null : await Enquiry.findOne({ where: { phone: phone_number } });
+    let user = null;
+    let student = null;
+
+    if (phone_number) {
+      const candidates = getPhoneCandidates(phone_number);
+      user = await User.findOne({ where: { phone_number: { [Op.in]: candidates } } });
+      student = user ? null : await Enquiry.findOne({ where: { phone: { [Op.in]: candidates } } });
+    } else if (email) {
+      const normalizedEmail = String(email).trim().toLowerCase();
+      user = await User.findOne({ where: { email: normalizedEmail } });
+      student = user ? null : await Enquiry.findOne({ where: { email: normalizedEmail } });
+    }
+
     if (!user && !student) {
       return res.status(404).json({
         message: 'Account not found',
       });
     }
 
+    const targetEmail = (email || (user ? user.email : student.email) || '').trim().toLowerCase();
+    const targetPhone = phone_number || (user ? user.phone_number : student.phone);
+
     // Generate OTP
     const otpCode = generateOTP();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Delete any existing OTP for this phone and create new one
+    // Delete any existing OTP for this user/phone/email
     try {
-      await OTP.destroy({ where: { phone_number } });
+      await OTP.destroy({
+        where: {
+          [Op.or]: [
+            ...(targetPhone ? [{ phone_number: targetPhone }] : []),
+            ...(targetEmail ? [{ email: targetEmail }] : []),
+            ...(student ? [{ userId: student.id }] : []),
+          ],
+        },
+      });
     } catch (err) {
       console.error('Error deleting old OTP:', err.message);
     }
 
-    // Save OTP to database with userId
+    // Save OTP to database
     try {
       await OTP.create({
         userId: student ? student.id : null,
-        email: user ? user.email : student.email,
-        phone_number,
+        email: targetEmail,
+        phone_number: targetPhone || '',
         otp_code: otpCode,
         is_verified: false,
         expires_at: expiresAt,
@@ -337,23 +491,57 @@ exports.sendLoginOTP = async (req, res) => {
       });
     }
 
-    // Send OTP via SMS
-    const smsResult = await sendOTPViaSMS(phone_number, otpCode);
+    let emailSent = false;
+    let smsSent = false;
+    let emailError = null;
+    let smsError = null;
 
-    if (!smsResult.success) {
+    if (targetEmail) {
+      try {
+        const emailResult = await sendOTPViaEmail({
+          to: targetEmail,
+          otpCode,
+          fullName: user ? user.name : student.name,
+          purpose: 'login',
+        });
+        emailSent = emailResult.success;
+        if (!emailResult.success) emailError = emailResult.error;
+      } catch (err) {
+        emailError = err.message;
+      }
+    }
+
+    if (targetPhone) {
+      try {
+        const smsResult = await sendOTPViaSMS(targetPhone, otpCode);
+        smsSent = smsResult.success;
+        if (!smsResult.success) smsError = smsResult.error;
+      } catch (err) {
+        smsError = err.message;
+      }
+    }
+
+    if (!emailSent && !smsSent) {
       return res.status(500).json({
-        message: 'Failed to send OTP',
-        error: smsResult.error,
+        message: 'Failed to send OTP via email or SMS',
+        emailError,
+        smsError,
       });
     }
 
+    const deliveredChannels = [];
+    if (emailSent) deliveredChannels.push('email');
+    if (smsSent) deliveredChannels.push('phone');
+
     return res.status(200).json({
-      message: 'OTP sent successfully to your phone',
+      message: `OTP sent successfully to your ${deliveredChannels.join(' and ')}`,
+      deliveredTo: deliveredChannels,
       data: {
-        phone_number,
+        phone_number: targetPhone,
+        email: targetEmail,
       },
       expiresIn: '10 minutes',
-      next: 'Use the OTP with phone_number to login',
+      next: 'Use the OTP to login',
     });
   } catch (error) {
     console.error('Send login OTP error:', error.message);
@@ -365,95 +553,40 @@ exports.sendLoginOTP = async (req, res) => {
 };
 
 exports.resendLoginOTP = async (req, res) => {
-  try {
-    const { phone_number } = req.body;
-
-    // Validate required fields
-    if (!phone_number) {
-      return res.status(400).json({
-        message: 'Phone number is required',
-      });
-    }
-
-    const user = await User.findOne({ where: { phone_number } });
-    const student = user ? null : await Enquiry.findOne({ where: { phone: phone_number } });
-    if (!user && !student) {
-      return res.status(404).json({
-        message: 'Account not found',
-      });
-    }
-
-    // Generate new OTP
-    const otpCode = generateOTP();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-    // Delete any existing OTP for this phone
-    try {
-      await OTP.destroy({ where: { phone_number } });
-    } catch (err) {
-      console.error('Error deleting old OTP:', err.message);
-    }
-
-    // Save new OTP to database with userId
-    try {
-      await OTP.create({
-        userId: student ? student.id : null,
-        email: user ? user.email : student.email,
-        phone_number,
-        otp_code: otpCode,
-        is_verified: false,
-        expires_at: expiresAt,
-      });
-    } catch (err) {
-      console.error('Error creating login OTP:', err.message);
-      return res.status(500).json({
-        message: 'Failed to create OTP record',
-        error: err.message,
-      });
-    }
-
-    // Send OTP via SMS
-    const smsResult = await sendOTPViaSMS(phone_number, otpCode);
-
-    if (!smsResult.success) {
-      return res.status(500).json({
-        message: 'Failed to send OTP',
-        error: smsResult.error,
-      });
-    }
-
-    return res.status(200).json({
-      message: 'OTP resent successfully to your phone',
-      data: {
-        phone_number,
-      },
-      expiresIn: '10 minutes',
-      next: 'Use the OTP with phone_number to login',
-    });
-  } catch (error) {
-    console.error('Resend login OTP error:', error.message);
-    return res.status(500).json({
-      message: 'Server error',
-      error: error.message,
-    });
-  }
+  return exports.sendLoginOTP(req, res);
 };
 
 exports.login = async (req, res) => {
   try {
-    const { phone_number, password, otp_code } = req.body;
+    const { phone_number, email, password, otp_code } = req.body;
 
     // Validate required fields
-    if (!phone_number) {
+    if (!phone_number && !email) {
       return res.status(400).json({
-        message: 'phone_number is required',
+        message: 'phone_number or email is required',
       });
     }
 
-    // Case 1: Phone Number + Password login
-    if (phone_number && password && !otp_code) {
-      const user = await User.findOne({ where: { phone_number } });
-      const student = user ? null : await Enquiry.findOne({ where: { phone: phone_number } });
+    const normalizedEmail = email ? String(email).trim().toLowerCase() : null;
+    const phoneCandidates = phone_number ? getPhoneCandidates(phone_number) : [];
+
+    // Case 1: Password login (phone or email + password)
+    if ((phone_number || normalizedEmail) && password && !otp_code) {
+      const userCondition = [];
+      const studentCondition = [];
+
+      if (phoneCandidates.length > 0) {
+        userCondition.push({ phone_number: { [Op.in]: phoneCandidates } });
+        studentCondition.push({ phone: { [Op.in]: phoneCandidates } });
+      }
+      if (normalizedEmail) {
+        userCondition.push({ email: normalizedEmail });
+        studentCondition.push({ email: normalizedEmail });
+      }
+
+      const user = await User.findOne({ where: { [Op.or]: userCondition } });
+      const student = user ? null : await Enquiry.findOne({ where: { [Op.or]: studentCondition } });
+
       if (!user && !student) {
         return res.status(401).json({
           message: 'Invalid credentials',
@@ -529,19 +662,47 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Case 2: Phone Number + OTP login
-    else if (phone_number && otp_code && !password) {
-      // Find student by phone number
-      const user = await User.findOne({ where: { phone_number } });
-      const student = user ? null : await Enquiry.findOne({ where: { phone: phone_number } });
+    // Case 2: OTP login (phone or email + otp_code)
+    else if ((phone_number || normalizedEmail) && otp_code && !password) {
+      const userCondition = [];
+      const studentCondition = [];
+
+      if (phoneCandidates.length > 0) {
+        userCondition.push({ phone_number: { [Op.in]: phoneCandidates } });
+        studentCondition.push({ phone: { [Op.in]: phoneCandidates } });
+      }
+      if (normalizedEmail) {
+        userCondition.push({ email: normalizedEmail });
+        studentCondition.push({ email: normalizedEmail });
+      }
+
+      const user = await User.findOne({ where: { [Op.or]: userCondition } });
+      const student = user ? null : await Enquiry.findOne({ where: { [Op.or]: studentCondition } });
+
       if (!user && !student) {
         return res.status(401).json({
           message: 'Invalid credentials',
         });
       }
 
+      const otpConditions = [];
+      if (phoneCandidates.length > 0) {
+        otpConditions.push({ phone_number: { [Op.in]: phoneCandidates } });
+      }
+      if (normalizedEmail) {
+        otpConditions.push({ email: normalizedEmail });
+      }
+      if (student) {
+        otpConditions.push({ userId: student.id });
+      }
+
       const otpRecord = await OTP.findOne({
-        where: { phone_number, otp_code, is_verified: false },
+        where: {
+          otp_code: String(otp_code).trim(),
+          [Op.or]: otpConditions,
+          is_verified: false,
+        },
+        order: [['createdAt', 'DESC']],
       });
 
       if (!otpRecord || new Date() > otpRecord.expires_at) {
@@ -585,7 +746,7 @@ exports.login = async (req, res) => {
         name: student.name,
         email: student.email,
         phone_number: student.phone,
-        role : 'student',
+        role: 'student',
       });
 
       return res.json({
@@ -611,7 +772,7 @@ exports.login = async (req, res) => {
     // Case 3: Invalid combination of parameters
     else {
       return res.status(400).json({
-        message: 'Invalid login method. Provide either: (1) phone_number+password, or (2) phone_number+otp_code',
+        message: 'Invalid login method. Provide either: (1) phone/email + password, or (2) phone/email + otp_code',
       });
     }
   } catch (error) {
