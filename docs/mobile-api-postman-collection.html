@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NammaQA Mobile App API Reference & Postman Collection</title>
+<style>
+@page {
+  size: A4;
+  margin: 12mm 12mm;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  color: #1e293b;
+  font-size: 9pt;
+  line-height: 1.4;
+  margin: 0;
+  background: #ffffff;
+}
+h1 {
+  font-size: 20pt;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 4px;
+}
+h2 {
+  font-size: 13pt;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin: 16px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid #2563eb;
+  page-break-after: avoid;
+}
+h3 {
+  font-size: 10.5pt;
+  font-weight: 600;
+  color: #1d4ed8;
+  margin: 10px 0 4px;
+  page-break-after: avoid;
+}
+p {
+  margin: 4px 0 6px;
+}
+.cover {
+  border-left: 6px solid #2563eb;
+  padding: 4px 0 6px 14px;
+  margin-bottom: 12px;
+}
+.subtitle {
+  color: #64748b;
+  font-size: 10pt;
+}
+.meta {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  font-size: 8.5pt;
+}
+.note {
+  background: #fefce8;
+  border-left: 4px solid #ca8a04;
+  padding: 8px 10px;
+  margin: 8px 0;
+  font-size: 8.5pt;
+}
+.endpoint {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  page-break-inside: avoid;
+  background: #ffffff;
+}
+.route-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.route, code, pre {
+  font-family: Consolas, "Courier New", monospace;
+}
+.route {
+  font-weight: 700;
+  font-size: 9.5pt;
+  color: #0f172a;
+  margin-left: 6px;
+}
+.verb {
+  display: inline-block;
+  min-width: 50px;
+  color: #ffffff;
+  border-radius: 4px;
+  padding: 2px 6px;
+  text-align: center;
+  font: 700 8pt Consolas, monospace;
+}
+.verb.GET { background: #059669; }
+.verb.POST { background: #2563eb; }
+.verb.PUT { background: #7c3aed; }
+.verb.DELETE { background: #dc2626; }
+
+.badge {
+  display: inline-block;
+  font-size: 7.5pt;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 6px;
+}
+.badge.public { background: #dcfce7; color: #166534; }
+.badge.auth { background: #fee2e2; color: #991b1b; }
+.badge.email { background: #dbeafe; color: #1e40af; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  page-break-inside: avoid;
+  font-size: 8.2pt;
+}
+th, td {
+  border: 1px solid #cbd5e1;
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background: #f1f5f9;
+  font-weight: 600;
+  color: #334155;
+}
+pre {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  font-size: 7.8pt;
+  margin: 4px 0 6px;
+  color: #0f172a;
+}
+.page-break {
+  page-break-before: always;
+}
+ul {
+  margin: 3px 0;
+  padding-left: 18px;
+}
+.field-name {
+  font-weight: 600;
+  color: #1e40af;
+}
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>NammaQA Mobile Application API Reference</h1>
+  <div class="subtitle">Complete Postman Collection, Authentication Flow & Endpoint Specifications</div>
+</div>
+
+<div class="meta">
+  <b>Base URLs:</b> <code>{{baseUrl}}/api</code> or <code>{{baseUrl}}/api/v1</code> (both prefixes are supported).<br>
+  <b>Postman File:</b> <code>docs/mobile-api-postman-collection.json</code> (Directly importable into Postman).<br>
+  <b>Authentication:</b> Public endpoints require no header. Protected endpoints require <code>Authorization: Bearer {{token}}</code>.<br>
+  <b>Email Verification Status:</b> Fixed & active. Sends HTML OTP codes directly to user emails using Google Workspace SMTP.
+</div>
+
+<div class="note">
+  <b>Mobile App Developer Quick Note:</b> During signup, a 6-digit OTP is automatically sent to both the student's <b>Email</b> and <b>WhatsApp/SMS</b>. The student enters this 6-digit code on the mobile app's verification screen, which calls <code>/api/mobile/auth/verify-otp</code> with <code>{ email, otp_code }</code> to complete registration and obtain their authentication token.
+</div>
+
+<h2>1. Authentication & Email Verification APIs</h2>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb POST">POST</span>
+    <span class="route">/api/mobile/auth/signup</span>
+    <span class="badge public">Public</span>
+    <span class="badge email">Dual Delivery (Email + Phone)</span>
+  </div>
+  <p>Registers a new student account in the enquiry system and sends a 6-digit verification code to the student's email and phone number.</p>
+  <b>Request Headers:</b> <code>Content-Type: application/json</code><br>
+  <b>Request Body:</b>
+  <pre>{
+  "fullName": "John Doe",
+  "email": "johndoe@example.com",
+  "phone_number": "9876543210",
+  "password": "Password@123"
+}</pre>
+  <b>Success Response (200 OK):</b>
+  <pre>{
+  "message": "OTP sent successfully to your email and phone",
+  "deliveredTo": ["email", "phone"],
+  "student": {
+    "id": 45,
+    "name": "John Doe",
+    "email": "johndoe@example.com",
+    "phone_number": "9876543210"
+  },
+  "enquiryId": 45,
+  "reference_id": 12,
+  "expiresIn": "10 minutes",
+  "next": "Verify OTP using /api/mobile/auth/verify-otp endpoint"
+}</pre>
+</div>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb POST">POST</span>
+    <span class="route">/api/mobile/auth/verify-otp</span>
+    <span class="badge public">Public</span>
+    <span class="badge email">Primary Verification</span>
+  </div>
+  <p>Verifies the 6-digit OTP code. Accepts either <code>email</code> or <code>phone_number</code> or <code>student_id</code>. Marks the account as verified (<code>isSignupVerified = true</code>) and issues a JWT session token.</p>
+  <b>Direct Route Alias:</b> <code>POST /api/mobile/auth/verify-email-otp</code><br>
+  <b>Request Body (Email Verification):</b>
+  <pre>{
+  "email": "johndoe@example.com",
+  "otp_code": "123456"
+}</pre>
+  <b>Alternative Request Body (Phone or Student ID):</b>
+  <pre>{
+  "student_id": 45,
+  "phone_number": "9876543210",
+  "otp_code": "123456"
+}</pre>
+  <b>Success Response (200 OK):</b>
+  <pre>{
+  "message": "OTP verified successfully",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "student": {
+    "id": 45,
+    "name": "John Doe",
+    "email": "johndoe@example.com",
+    "phone_number": "9876543210",
+    "candidateStatus": "enquiry stage",
+    "classroomEligible": false
+  },
+  "enquiryId": 45
+}</pre>
+</div>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb POST">POST</span>
+    <span class="route">/api/mobile/auth/resend-signup-otp</span>
+    <span class="badge public">Public</span>
+  </div>
+  <p>Generates a fresh OTP and resends it to the user's email and phone number.</p>
+  <b>Direct Route Alias:</b> <code>POST /api/mobile/auth/send-email-otp</code><br>
+  <b>Request Body:</b>
+  <pre>{
+  "email": "johndoe@example.com"
+}</pre>
+  <b>Success Response (200 OK):</b>
+  <pre>{
+  "message": "OTP resent successfully to your email and phone",
+  "deliveredTo": ["email", "phone"],
+  "data": {
+    "student_id": 45,
+    "email": "johndoe@example.com",
+    "phone_number": "9876543210"
+  },
+  "expiresIn": "10 minutes"
+}</pre>
+</div>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb POST">POST</span>
+    <span class="route">/api/mobile/auth/login</span>
+    <span class="badge public">Public</span>
+  </div>
+  <p>Authenticates user. Supports two login modes: (1) Password Login, or (2) Passwordless OTP Login.</p>
+  <b>Option A: Email + Password</b>
+  <pre>{
+  "email": "johndoe@example.com",
+  "password": "Password@123"
+}</pre>
+  <b>Option B: Email + OTP Code</b>
+  <pre>{
+  "email": "johndoe@example.com",
+  "otp_code": "123456"
+}</pre>
+  <b>Success Response (200 OK):</b>
+  <pre>{
+  "message": "Login successful",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "student": {
+    "id": 45,
+    "name": "John Doe",
+    "email": "johndoe@example.com",
+    "phone_number": "9876543210",
+    "candidateStatus": "class",
+    "batchId": 3,
+    "classroomEligible": true
+  },
+  "enquiryId": 45
+}</pre>
+</div>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb POST">POST</span>
+    <span class="route">/api/mobile/auth/send-login-otp</span>
+    <span class="badge public">Public</span>
+  </div>
+  <p>Generates and delivers a login OTP to registered email or phone for passwordless login.</p>
+  <b>Request Body:</b>
+  <pre>{
+  "email": "johndoe@example.com"
+}</pre>
+</div>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb POST">POST</span>
+    <span class="route">/api/mobile/auth/check-student-exists</span>
+    <span class="badge public">Public</span>
+  </div>
+  <p>Checks whether an account exists for a phone number or email before user signup.</p>
+  <b>Request Body:</b>
+  <pre>{
+  "phone_number": "9876543210"
+}</pre>
+  <b>Success Response:</b>
+  <pre>{
+  "message": "Account exists",
+  "exists": true,
+  "role": "student"
+}</pre>
+</div>
+
+<div class="page-break"></div>
+
+<h2>2. Student Classroom & Profile APIs</h2>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb GET">GET</span>
+    <span class="route">/api/enquiry-students/validate-token</span>
+    <span class="badge auth">Auth Required</span>
+  </div>
+  <p>Validates stored session token on app startup.</p>
+  <b>Headers:</b> <code>Authorization: Bearer {{token}}</code><br>
+  <b>Response:</b> <code>{ "valid": true, "user": { "id": 45, "name": "John Doe", "email": "..." } }</code>
+</div>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb GET">GET</span>
+    <span class="route">/api/enquiry-students/classroom</span>
+    <span class="badge auth">Auth Required</span>
+  </div>
+  <p>Returns the student's current classroom status, batch details, assigned instructor, and package progress.</p>
+  <b>Headers:</b> <code>Authorization: Bearer {{token}}</code><br>
+  <b>Response:</b>
+  <pre>{
+  "success": true,
+  "classroom": {
+    "student": { "id": 45, "name": "John Doe", "candidateStatus": "class" },
+    "batch": { "id": 3, "batchName": "QA Batch 2026-A", "timing": "10:00 AM - 12:00 PM" },
+    "instructor": { "id": 2, "name": "Jane Smith", "email": "instructor@nammaqa.com" },
+    "package": { "id": 1, "name": "QA Automation Professional" }
+  }
+}</pre>
+</div>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb GET">GET</span>
+    <span class="route">/api/enquiry-students/classmates</span>
+    <span class="badge auth">Auth Required</span>
+  </div>
+  <p>Lists fellow peers and students enrolled in the same batch.</p>
+  <b>Headers:</b> <code>Authorization: Bearer {{token}}</code>
+</div>
+
+<h2>3. Batches & Course Catalog APIs</h2>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb GET">GET</span>
+    <span class="route">/api/student-batches</span>
+    <span class="badge auth">Auth Required</span>
+  </div>
+  <p>Returns all batches the authenticated student is assigned to.</p>
+  <b>Headers:</b> <code>Authorization: Bearer {{token}}</code>
+</div>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb GET">GET</span>
+    <span class="route">/api/student-batches/:batchId/details</span>
+    <span class="badge auth">Auth Required</span>
+  </div>
+  <p>Returns full schedule, instructor profile, and subject breakdown for a specific batch.</p>
+  <b>Headers:</b> <code>Authorization: Bearer {{token}}</code>
+</div>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb GET">GET</span>
+    <span class="route">/api/packages</span>
+    <span class="badge public">Public</span>
+  </div>
+  <p>Returns course packages available for enrollment, including syllabus, duration, and subjects.</p>
+  <b>Query Parameters (Optional):</b> <code>?domain=Testing</code>
+</div>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb GET">GET</span>
+    <span class="route">/api/packages/domains</span>
+    <span class="badge public">Public</span>
+  </div>
+  <p>Returns sorted list of domains (Testing, Development, Cybersecurity, AI/ML, etc.) for category filters.</p>
+</div>
+
+<div class="page-break"></div>
+
+<h2>4. Attendance Management APIs</h2>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb POST">POST</span>
+    <span class="route">/api/attendance/mark</span>
+    <span class="badge auth">Auth Required</span>
+  </div>
+  <p>Student marks classroom attendance by submitting the dynamic token from the instructor's QR code.</p>
+  <b>Headers:</b> <code>Authorization: Bearer {{token}}</code><br>
+  <b>Request Body:</b>
+  <pre>{
+  "batchId": 3,
+  "qrToken": "eyJhbGciOiJIUzI1NiIsInR5c...",
+  "latitude": 12.9716,
+  "longitude": 77.5946
+}</pre>
+  <b>Success Response (200 OK):</b>
+  <pre>{
+  "success": true,
+  "message": "Attendance marked successfully",
+  "attendance": {
+    "id": 104,
+    "studentId": 45,
+    "batchId": 3,
+    "status": "present",
+    "timestamp": "2026-10-16T17:15:00.000Z"
+  }
+}</pre>
+</div>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb GET">GET</span>
+    <span class="route">/api/attendance/student</span>
+    <span class="badge auth">Auth Required</span>
+  </div>
+  <p>Returns the logged-in student's complete attendance summary and percentage.</p>
+  <b>Headers:</b> <code>Authorization: Bearer {{token}}</code>
+</div>
+
+<h2>5. Assignments & Batch Materials APIs</h2>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb GET">GET</span>
+    <span class="route">/api/materials/batch/:batchId</span>
+    <span class="badge auth">Auth Required</span>
+  </div>
+  <p>Returns all lecture slides, PDFs, notes, and study links uploaded for the batch.</p>
+  <b>Headers:</b> <code>Authorization: Bearer {{token}}</code>
+</div>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb GET">GET</span>
+    <span class="route">/api/assignment-responses/my-submissions</span>
+    <span class="badge auth">Auth Required</span>
+  </div>
+  <p>Lists all assignments submitted by the authenticated student, including scores and instructor feedback.</p>
+  <b>Headers:</b> <code>Authorization: Bearer {{token}}</code>
+</div>
+
+<div class="endpoint">
+  <div class="route-header">
+    <span class="verb POST">POST</span>
+    <span class="route">/api/assignment-responses</span>
+    <span class="badge auth">Auth Required</span>
+  </div>
+  <p>Submits student assignment files (PDF, ZIP, DOCX) and comments.</p>
+  <b>Headers:</b> <code>Authorization: Bearer {{token}}</code>, <code>Content-Type: multipart/form-data</code><br>
+  <b>Multipart Form Data:</b>
+  <ul>
+    <li><span class="field-name">assignmentId</span>: (Number) ID of the target assignment.</li>
+    <li><span class="field-name">comment</span>: (Text) Optional student comment.</li>
+    <li><span class="field-name">files</span>: (File) Document attachment(s).</li>
+  </ul>
+</div>
+
+<h2>Common Error Codes</h2>
+<table>
+  <tr>
+    <th style="width: 15%;">HTTP Status</th>
+    <th style="width: 35%;">Reason</th>
+    <th>Sample Response</th>
+  </tr>
+  <tr>
+    <td><b>400 Bad Request</b></td>
+    <td>Missing required fields (e.g. <code>email</code>, <code>otp_code</code>, <code>password</code>) or invalid format.</td>
+    <td><code>{ "message": "All fields (fullName, phone_number, email, password) are required" }</code></td>
+  </tr>
+  <tr>
+    <td><b>401 Unauthorized</b></td>
+    <td>Invalid/expired OTP code, wrong password, or missing/expired JWT token.</td>
+    <td><code>{ "message": "OTP has expired. Please resend OTP." }</code></td>
+  </tr>
+  <tr>
+    <td><b>403 Forbidden</b></td>
+    <td>Account not verified (<code>isSignupVerified = false</code>) or insufficient role permissions.</td>
+    <td><code>{ "message": "Account not verified. Please complete OTP verification during signup." }</code></td>
+  </tr>
+  <tr>
+    <td><b>404 Not Found</b></td>
+    <td>Student, Batch, or Package does not exist.</td>
+    <td><code>{ "message": "Student not found" }</code></td>
+  </tr>
+  <tr>
+    <td><b>500 Server Error</b></td>
+    <td>Unhandled database or SMTP delivery failure.</td>
+    <td><code>{ "message": "Server error", "error": "..." }</code></td>
+  </tr>
+</table>
+
+</body>
+</html>
