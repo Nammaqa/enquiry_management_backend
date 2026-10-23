@@ -8,6 +8,7 @@ const AssignmentResponse = db.AssignmentResponse;
 const Assignment = db.Assignment;
 const Batch = db.Batch;
 const Enquiry = db.Enquiry;
+const User = db.User;
 
 /**
  * CREATE Assignment Response (STUDENTS/ENQUIRIES)
@@ -382,3 +383,111 @@ exports.getAllResponses = async (req, res) => {
     res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 };
+
+/**
+ * REVIEW Assignment Response (Instructor / Admin / Counsellor)
+ * POST /api/assignment-responses/:id/review
+ * PUT  /api/assignment-responses/:id/review
+ */
+exports.reviewAssignmentResponse = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      status,
+      instructorComments,
+      comments,
+      feedback,
+      reviewNotes
+    } = req.body || {};
+
+    const reviewerId = req.user?.userId || req.user?.id;
+    const userRole = String(req.user?.role || '').toUpperCase();
+
+    if (!reviewerId && !req.user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const response = await AssignmentResponse.findByPk(id, {
+      include: [
+        {
+          model: Assignment,
+          as: 'assignment',
+          attributes: ['id', 'title', 'description', 'dueDate', 'createdBy', 'batchId']
+        },
+        {
+          model: Enquiry,
+          as: 'enquiry',
+          attributes: ['id', 'name', 'email', 'candidateStatus']
+        },
+        {
+          model: Batch,
+          as: 'batch',
+          attributes: ['id', 'name', 'code']
+        }
+      ]
+    });
+
+    if (!response) {
+      return res.status(404).json({ message: 'Assignment response not found' });
+    }
+
+    // Role check: Only instructor, admin, or counsellor can review
+    if (userRole && !['ADMIN', 'COUNSELLOR', 'INSTRUCTOR'].includes(userRole)) {
+      return res.status(403).json({ message: 'Access denied. Only instructors or admins can review submissions.' });
+    }
+
+    const commentText = instructorComments !== undefined
+      ? instructorComments
+      : (comments !== undefined ? comments : (feedback !== undefined ? feedback : reviewNotes));
+
+    const validStatuses = ['assigned', 'submitted', 'reviewed'];
+    const newStatus = status && validStatuses.includes(status) ? status : 'reviewed';
+
+    const updateData = {
+      status: newStatus,
+      reviewedBy: reviewerId || response.reviewedBy,
+      reviewedOn: new Date()
+    };
+
+    if (commentText !== undefined) {
+      updateData.instructorComments = commentText;
+    }
+
+    await response.update(updateData);
+
+    const updatedResponse = await AssignmentResponse.findByPk(id, {
+      include: [
+        {
+          model: Assignment,
+          as: 'assignment',
+          attributes: ['id', 'title', 'description', 'dueDate', 'createdBy', 'batchId']
+        },
+        {
+          model: Enquiry,
+          as: 'enquiry',
+          attributes: ['id', 'name', 'email', 'candidateStatus']
+        },
+        {
+          model: Batch,
+          as: 'batch',
+          attributes: ['id', 'name', 'code']
+        },
+        {
+          model: User,
+          as: 'reviewer',
+          attributes: ['id', 'name', 'email', 'role']
+        }
+      ]
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Assignment reviewed successfully',
+      data: updatedResponse
+    });
+  } catch (error) {
+    console.error('Error in reviewAssignmentResponse:', error);
+    return res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+};
+

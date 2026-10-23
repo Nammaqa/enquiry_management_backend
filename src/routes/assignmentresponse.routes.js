@@ -3,6 +3,7 @@ const router = express.Router();
 const assignmentResponseController = require('../controllers/assignmentresponse.controller');
 const enquiryAuth = require('../middlewares/enquiryAuth.middleware');
 const sharedAuth = require('../middlewares/sharedAuth.middleware');
+const auth = require('../middlewares/auth.middleware');
 
 /**
  * @route   GET /api/assignment-responses
@@ -13,6 +14,33 @@ router.get(
   '/',
   sharedAuth,
   assignmentResponseController.getAllResponses
+);
+
+/**
+ * @route   POST /api/assignment-responses/:id/review
+ * @route   PUT /api/assignment-responses/:id/review
+ * @desc    Instructor/Admin reviews and adds comments to an assignment response
+ * @access  Private (System User JWT)
+ */
+router.post(
+  '/:id/review',
+  auth,
+  assignmentResponseController.reviewAssignmentResponse
+);
+router.put(
+  '/:id/review',
+  auth,
+  assignmentResponseController.reviewAssignmentResponse
+);
+router.post(
+  '/review/:id',
+  auth,
+  assignmentResponseController.reviewAssignmentResponse
+);
+router.put(
+  '/review/:id',
+  auth,
+  assignmentResponseController.reviewAssignmentResponse
 );
 
 /**
