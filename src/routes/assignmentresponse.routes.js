@@ -4,6 +4,7 @@ const assignmentResponseController = require('../controllers/assignmentresponse.
 const enquiryAuth = require('../middlewares/enquiryAuth.middleware');
 const sharedAuth = require('../middlewares/sharedAuth.middleware');
 const auth = require('../middlewares/auth.middleware');
+const auth = require('../middlewares/auth.middleware');
 
 /**
  * @route   GET /api/assignment-responses

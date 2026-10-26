@@ -61,6 +61,14 @@ router.get('/classmates', enquiryStudentController.getClassmates);
 router.get('/enrollment', enquiryStudentController.getEnrollmentDetails);
 
 /**
+ * GET and PUT the authenticated student's NAcademy interests
+ * GET /api/enquiry-students/interests
+ * PUT /api/enquiry-students/interests
+ */
+router.get('/interests', enquiryStudentController.getStudentInterests);
+router.put('/interests', enquiryStudentController.saveStudentInterests);
+
+/**
  * PUT update student profile
  * PUT /api/enquiry-students/profile
  */
