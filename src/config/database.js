@@ -1,4 +1,4 @@
-require('dotenv').config({ override: true });
+require('dotenv').config();
 const pg = require('pg');
 
 const DEFAULT_TEST_DB_URL =
@@ -47,49 +47,61 @@ function parseConfigFromUrl(rawUrl, isDev = false) {
   }
 }
 
-function parseLocalConfig(isDev = false) {
-  return {
-    dialect: 'postgres',
-    username: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || '',
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: parseInt(process.env.DB_PORT || 5432, 10),
-    database: process.env.DB_NAME || 'enquiry_form',
-    dialectModule: pg,
-    dialectOptions: {},
-    pool: {
-      max: 5,
-      min: 0,
-      acquire: 15000,
-      idle: 5000,
-      evict: 5000,
-    },
-    logging: isDev ? console.log : false,
-  };
+function isTestEnvironment() {
+  if (process.env.USE_TEST_DB === 'true') return true;
+  if (process.env.USE_PROD_DB === 'true') return false;
+
+  const vercelEnvironment = (process.env.VERCEL_ENV || '').toLowerCase();
+  if (vercelEnvironment === 'production') return false;
+  if (['preview', 'development'].includes(vercelEnvironment)) return true;
+
+  const appEnv = (process.env.APP_ENV || '').toLowerCase();
+  if (['development', 'test', 'testing', 'staging', 'dev'].includes(appEnv)) return true;
+  if (['production', 'prod'].includes(appEnv)) return false;
+
+  const gitBranch = (process.env.VERCEL_GIT_COMMIT_REF || '').toLowerCase();
+  if (['dev', 'enhancement', 'develop', 'staging', 'test'].includes(gitBranch)) return true;
+  if (['main', 'master', 'production', 'prod'].includes(gitBranch)) return false;
+
+  const vercelUrl = (process.env.VERCEL_URL || '').toLowerCase();
+  if (vercelUrl.includes('devenquiry') || vercelUrl.includes('-dev') || vercelUrl.includes('-enhancement')) return true;
+
+  if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') return true;
+
+  return false;
 }
 
-// Development / Testing DB URL resolution:
-// Priority: DEV_DATABASE_URL -> TEST_DATABASE_URL -> DATABASE_URL (if in dev) -> DEFAULT_TEST_DB_URL
-const devUrl =
-  sanitizeUrl(process.env.DEV_DATABASE_URL) ||
-  sanitizeUrl(process.env.TEST_DATABASE_URL) ||
-  (process.env.NODE_ENV !== 'production' ? sanitizeUrl(process.env.DATABASE_URL) : null) ||
-  DEFAULT_TEST_DB_URL;
+// Testing Database URL:
+let devUrl = sanitizeUrl(process.env.DEV_DATABASE_URL) || sanitizeUrl(process.env.TEST_DATABASE_URL);
+if (!devUrl && process.env.DATABASE_URL && process.env.DATABASE_URL.includes('purple-king')) {
+  devUrl = sanitizeUrl(process.env.DATABASE_URL);
+}
+if (!devUrl) {
+  devUrl = DEFAULT_TEST_DB_URL;
+}
 
-// Production DB URL resolution:
-// Priority: PROD_DATABASE_URL -> DATABASE_URL_PRODUCTION -> DATABASE_URL (if in prod) -> DEFAULT_PROD_DB_URL
-const prodUrl =
-  sanitizeUrl(process.env.PROD_DATABASE_URL) ||
-  sanitizeUrl(process.env.DATABASE_URL_PRODUCTION) ||
-  (process.env.NODE_ENV === 'production' ? sanitizeUrl(process.env.DATABASE_URL) : null) ||
-  DEFAULT_PROD_DB_URL;
+// Production Database URL:
+let prodUrl = sanitizeUrl(process.env.PROD_DATABASE_URL) || sanitizeUrl(process.env.DATABASE_URL_PRODUCTION);
+if (!prodUrl && process.env.DATABASE_URL && process.env.DATABASE_URL.includes('lucky-brook')) {
+  prodUrl = sanitizeUrl(process.env.DATABASE_URL);
+}
+if (!prodUrl) {
+  prodUrl = DEFAULT_PROD_DB_URL;
+}
 
-const developmentConfig = parseConfigFromUrl(devUrl, false) || parseLocalConfig(false);
-const testConfig = parseConfigFromUrl(devUrl, false) || parseLocalConfig(false);
-const productionConfig = parseConfigFromUrl(prodUrl, false) || parseLocalConfig(false);
+const isTest = isTestEnvironment();
+const activeUrl = isTest ? devUrl : prodUrl;
+
+const developmentConfig = parseConfigFromUrl(devUrl, false);
+const testConfig = parseConfigFromUrl(devUrl, false);
+const productionConfig = parseConfigFromUrl(prodUrl, false);
+const activeConfig = parseConfigFromUrl(activeUrl, false);
 
 module.exports = {
   development: developmentConfig,
   test: testConfig,
   production: productionConfig,
+  active: activeConfig,
+  isTestEnvironment: isTest,
+  activeHost: activeConfig ? activeConfig.host : null,
 };

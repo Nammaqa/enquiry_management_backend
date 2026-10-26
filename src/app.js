@@ -63,14 +63,19 @@ app.get('/', (req, res) => {
 
 app.get('/api/health', (req, res) => {
   const { sequelize } = require('./models');
+  const dbConfigs = require('./config/database');
+  const host = sequelize.config?.host || 'unknown';
+  const isTesting = host.includes('purple-king');
   res.status(200).json({
     status: 'success',
     message: 'API is healthy',
     timestamp: new Date().toISOString(),
+    environment: dbConfigs.isTestEnvironment ? 'TESTING' : 'PRODUCTION',
     nodeEnv: process.env.NODE_ENV,
-    nodeVersion: process.version,
+    gitBranch: process.env.VERCEL_GIT_COMMIT_REF || 'local',
     database: {
-      host: sequelize.config?.host || 'unknown',
+      type: isTesting ? 'TESTING_DATABASE (ep-purple-king)' : 'PRODUCTION_DATABASE (ep-lucky-brook)',
+      host,
       database: sequelize.config?.database || 'unknown',
       dialect: sequelize.config?.dialect || 'postgres',
     },
