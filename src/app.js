@@ -1,3 +1,4 @@
+require('express-async-errors');
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -133,6 +134,25 @@ app.use((req, res) => {
     status: 'error',
     message: 'Route not found',
     path: req.path
+  });
+});
+
+// Global error handler (ensures CORS headers and clean JSON response even on unhandled errors)
+app.use((err, req, res, next) => {
+  console.error('Unhandled server error:', err);
+  const origin = req.headers.origin;
+  if (origin) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin');
+
+  res.status(err.status || 500).json({
+    status: 'error',
+    message: err.message || 'Internal Server Error'
   });
 });
 
