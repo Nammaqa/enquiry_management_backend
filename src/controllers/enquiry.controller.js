@@ -40,6 +40,7 @@ exports.createEnquiry = async (req, res) => {
       name,
       email,
       phone,
+      username,
 
       // Personal details
       collegeName,
@@ -111,19 +112,36 @@ exports.createEnquiry = async (req, res) => {
     }
 
     // Validate phone format (at least 10 digits)
-    const phoneRegex = /^\d{10,}$/;
-    if (!phoneRegex.test(phone.replace(/\D/g, ''))) {
+    const rawPhoneDigits = phone.replace(/\D/g, '');
+    if (rawPhoneDigits.length < 10) {
       return res.status(400).json({
         message: 'Phone number must contain at least 10 digits'
       });
     }
 
-    // Check for existing enquiry with same email or phone
-    const normalizedPhone = phone.replace(/\D/g, '');
-    const emailExists = await Enquiry.findOne({ where: { email: email.toLowerCase() } });
-    const phoneExists = await Enquiry.findOne({ where: { phone: normalizedPhone } });
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanUsername = username ? String(username).trim().toLowerCase().replace(/^@/, '') : null;
+    const phoneDigits = rawPhoneDigits.length === 12 && rawPhoneDigits.startsWith('91') ? rawPhoneDigits.substring(2) : rawPhoneDigits;
+    const phoneCandidates = [phoneDigits, rawPhoneDigits, '91' + phoneDigits, '+91' + phoneDigits];
 
-    if (emailExists || phoneExists) {
+    // Check for existing enquiry with same email, phone, or username
+    const emailExists = await Enquiry.findOne({
+      where: { email: { [Op.iLike]: cleanEmail } }
+    });
+    const phoneExists = await Enquiry.findOne({
+      where: { phone: { [Op.in]: phoneCandidates } }
+    });
+    const usernameExists = cleanUsername ? await Enquiry.findOne({
+      where: {
+        [Op.or]: [
+          { username: { [Op.iLike]: cleanUsername } },
+          { email: { [Op.iLike]: cleanUsername } },
+          { phone: cleanUsername }
+        ]
+      }
+    }) : null;
+
+    if (emailExists || phoneExists || usernameExists) {
       if (emailExists && phoneExists) {
         return res.status(400).json({
           message: 'An enquiry with this email and phone number already exists'
@@ -134,8 +152,13 @@ exports.createEnquiry = async (req, res) => {
           message: 'An enquiry with this email already exists'
         });
       }
+      if (phoneExists) {
+        return res.status(400).json({
+          message: 'An enquiry with this phone number already exists'
+        });
+      }
       return res.status(400).json({
-        message: 'An enquiry with this phone number already exists'
+        message: 'An enquiry with this username already exists'
       });
     }
 
@@ -192,8 +215,9 @@ exports.createEnquiry = async (req, res) => {
     // Create enquiry with all details
     const enquiry = await Enquiry.create({
       name: name.trim(),
-      email: email.toLowerCase().trim(),
-      phone: phone.replace(/\D/g, ''),
+      email: cleanEmail,
+      phone: phoneDigits,
+      username: cleanUsername || null,
       collegeName: collegeName?.trim() || null,
       current_location: current_location?.trim() || null,
       profession: profession?.trim() || null,
