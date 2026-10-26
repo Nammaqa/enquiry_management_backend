@@ -70,6 +70,25 @@ module.exports = (sequelize, DataTypes) => {
                 allowNull: true,
                 defaultValue: [],
             },
+            learningFields: {
+                type: DataTypes.ARRAY(DataTypes.STRING),
+                allowNull: false,
+                defaultValue: [],
+            },
+            occupations: {
+                type: DataTypes.ARRAY(DataTypes.STRING),
+                allowNull: false,
+                defaultValue: [],
+            },
+            skills: {
+                type: DataTypes.ARRAY(DataTypes.STRING),
+                allowNull: false,
+                defaultValue: [],
+            },
+            interestsCompletedAt: {
+                type: DataTypes.DATE,
+                allowNull: true,
+            },
             trainingMode: {
                 type: DataTypes.STRING(50),
                 allowNull: true,

@@ -14,6 +14,39 @@ const MockInterview = db.MockInterview;
 const BatchStudent = db.BatchStudent;
 const sequelize = db.sequelize;
 
+const STUDENT_INTEREST_OPTIONS = {
+  learningFields: [
+    'Testing',
+    'Development',
+    'DevOps',
+    'AI/ML',
+    'Cybersecurity',
+    'UI/UX Design',
+    'Data Analytics',
+    'Other',
+  ],
+  occupations: [
+    'QA Analyst',
+    'Software Tester',
+    'Manual Tester',
+    'Web Developer',
+    'Software Engineer',
+    'UX Designer',
+    'Python Developer',
+    'Other',
+  ],
+  skills: [
+    'Selenium',
+    'Kubernetes',
+    'React',
+    'Angular',
+    'Figma',
+    'Python',
+    'Java',
+    'Other',
+  ],
+};
+
 const validateAlphabetsOnly = (value, fieldName) => {
   if (!value) return null;
   // Allow letters, numbers, spaces and common punctuation; reject control chars
@@ -22,6 +55,98 @@ const validateAlphabetsOnly = (value, fieldName) => {
     return `${fieldName} contains invalid characters`;
   }
   return null;
+};
+
+exports.getStudentInterests = async (req, res) => {
+  try {
+    const enquiryId = req.enquiry?.enquiryId;
+    if (!enquiryId) {
+      return res.status(401).json({ message: 'Enquiry ID not found in token' });
+    }
+
+    const student = await Enquiry.findByPk(enquiryId, {
+      attributes: [
+        'learningFields',
+        'occupations',
+        'skills',
+        'interestsCompletedAt',
+      ],
+    });
+
+    if (!student) {
+      return res.status(404).json({ message: 'Student record not found' });
+    }
+
+    const data = {
+      learningFields: student.learningFields || [],
+      occupations: student.occupations || [],
+      skills: student.skills || [],
+      completedAt: student.interestsCompletedAt,
+    };
+    data.completed = Boolean(
+      data.completedAt &&
+      data.learningFields.length &&
+      data.occupations.length &&
+      data.skills.length
+    );
+
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error('Error in getStudentInterests:', error);
+    return res.status(500).json({ message: 'Unable to load student interests' });
+  }
+};
+
+exports.saveStudentInterests = async (req, res) => {
+  try {
+    const enquiryId = req.enquiry?.enquiryId;
+    if (!enquiryId) {
+      return res.status(401).json({ message: 'Enquiry ID not found in token' });
+    }
+
+    const student = await Enquiry.findByPk(enquiryId);
+    if (!student) {
+      return res.status(404).json({ message: 'Student record not found' });
+    }
+
+    const selections = {};
+    for (const field of Object.keys(STUDENT_INTEREST_OPTIONS)) {
+      const values = req.body?.[field];
+      if (
+        !Array.isArray(values) ||
+        values.length === 0 ||
+        values.some(
+          (value) =>
+            typeof value !== 'string' ||
+            !STUDENT_INTEREST_OPTIONS[field].includes(value.trim())
+        )
+      ) {
+        return res.status(400).json({
+          message: `Select at least one valid ${field} interest`,
+        });
+      }
+      selections[field] = [...new Set(values.map((value) => value.trim()))];
+    }
+
+    const completedAt = new Date();
+    await student.update({
+      ...selections,
+      interestsCompletedAt: completedAt,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Student interests saved successfully',
+      data: {
+        ...selections,
+        completed: true,
+        completedAt,
+      },
+    });
+  } catch (error) {
+    console.error('Error in saveStudentInterests:', error);
+    return res.status(500).json({ message: 'Unable to save student interests' });
+  }
 };
 
 /**
