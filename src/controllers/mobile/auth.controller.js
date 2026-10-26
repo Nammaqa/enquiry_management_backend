@@ -27,7 +27,7 @@ const getPhoneCandidates = (phone) => {
 
 exports.signup = async (req, res) => {
   try {
-    const { fullName, phone_number, email, password } = req.body;
+    const { fullName, phone_number, email, password, username } = req.body;
 
     // Validate required fields
     if (!fullName || !phone_number || !email || !password) {
@@ -52,17 +52,35 @@ exports.signup = async (req, res) => {
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
+    const cleanUsername = username ? String(username).trim().toLowerCase().replace(/^@/, '') : null;
+    const phoneCandidates = getPhoneCandidates(phone_number);
 
     // Check if phone already exists (primary identifier for mobile signup)
-    let student = await Enquiry.findOne({ where: { phone: phone_number } });
+    let student = await Enquiry.findOne({
+      where: { phone: { [Op.in]: phoneCandidates } },
+    });
 
     if (!student) {
       // Also check if email exists to prevent duplicate accounts
-      const existingEmail = await Enquiry.findOne({ where: { email: normalizedEmail } });
+      const existingEmail = await Enquiry.findOne({
+        where: { email: { [Op.iLike]: normalizedEmail } },
+      });
       if (existingEmail) {
         return res.status(400).json({
           message: 'Email already registered with a different phone number',
         });
+      }
+
+      // Check if username exists
+      if (cleanUsername) {
+        const existingUsername = await Enquiry.findOne({
+          where: { username: { [Op.iLike]: cleanUsername } },
+        });
+        if (existingUsername) {
+          return res.status(400).json({
+            message: 'Username is already taken. Please choose another username.',
+          });
+        }
       }
 
       // Create new student account in Enquiry table
@@ -72,6 +90,7 @@ exports.signup = async (req, res) => {
         name: fullName,
         email: normalizedEmail,
         phone: phone_number,
+        username: cleanUsername || null,
         password: hashedPassword,
         candidateStatus: 'enquiry stage',
         global: false,
@@ -999,17 +1018,19 @@ exports.checkStudentExists = async (req, res) => {
   try {
     const phone_number = req.body?.phone_number || req.body?.phone || req.body?.mobile || req.query?.phone_number || req.query?.phone || req.query?.mobile;
     const email = req.body?.email || req.query?.email;
+    const username = req.body?.username || req.query?.username;
 
     // Validate required fields
-    if (!phone_number && !email) {
+    if (!phone_number && !email && !username) {
       return res.status(400).json({
-        message: 'Phone number or email is required',
+        message: 'Phone number, email, or username is required',
         exists: false,
       });
     }
 
     const phoneCandidates = phone_number ? getPhoneCandidates(phone_number) : [];
     const normalizedEmail = email ? String(email).trim().toLowerCase() : null;
+    const cleanUsername = username ? String(username).trim().toLowerCase().replace(/^@/, '') : null;
 
     const userConditions = [];
     const studentConditions = [];
@@ -1019,8 +1040,16 @@ exports.checkStudentExists = async (req, res) => {
       studentConditions.push({ phone: { [Op.in]: phoneCandidates } });
     }
     if (normalizedEmail) {
-      userConditions.push({ email: normalizedEmail });
-      studentConditions.push({ email: normalizedEmail });
+      userConditions.push({ email: { [Op.iLike]: normalizedEmail } });
+      studentConditions.push({ email: { [Op.iLike]: normalizedEmail } });
+    }
+    if (cleanUsername) {
+      userConditions.push({ email: { [Op.iLike]: cleanUsername } });
+      studentConditions.push(
+        { username: { [Op.iLike]: cleanUsername } },
+        { email: { [Op.iLike]: cleanUsername } },
+        { phone: cleanUsername }
+      );
     }
 
     const user = await User.findOne({

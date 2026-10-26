@@ -163,6 +163,7 @@ exports.enquiryStudentSignup = async (req, res) => {
       email,
       phone,
       password,
+      username,
     } = req.body;
 
     // Validate required fields
@@ -183,8 +184,8 @@ exports.enquiryStudentSignup = async (req, res) => {
     }
 
     // Validate phone (at least 10 digits)
-    const phoneDigits = phone.replace(/\D/g, '');
-    if (phoneDigits.length < 10) {
+    const rawPhoneDigits = phone.replace(/\D/g, '');
+    if (rawPhoneDigits.length < 10) {
       return res.status(400).json({ message: 'Phone number must contain at least 10 digits' });
     }
 
@@ -193,22 +194,36 @@ exports.enquiryStudentSignup = async (req, res) => {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
 
-    // Check for existing enquiry with same email or phone
+    const cleanEmail = String(email).trim().toLowerCase();
+    const cleanUsername = username ? String(username).trim().toLowerCase().replace(/^@/, '') : null;
+    const phoneDigits = rawPhoneDigits.length === 12 && rawPhoneDigits.startsWith('91') ? rawPhoneDigits.substring(2) : rawPhoneDigits;
+    const phoneCandidates = [phoneDigits, rawPhoneDigits, '91' + phoneDigits, '+91' + phoneDigits];
+
+    // Check for existing enquiry with same email, phone, or username
+    const orConditions = [
+      { email: { [Op.iLike]: cleanEmail } },
+      { phone: { [Op.in]: phoneCandidates } }
+    ];
+    if (cleanUsername) {
+      orConditions.push(
+        { username: { [Op.iLike]: cleanUsername } },
+        { email: { [Op.iLike]: cleanUsername } },
+        { phone: cleanUsername }
+      );
+    }
+
     const existing = await Enquiry.findOne({
-      where: {
-        [Op.or]: [
-          { email: email.toLowerCase() },
-          { phone: phoneDigits }
-        ]
-      }
+      where: { [Op.or]: orConditions }
     });
 
     if (existing) {
-      return res.status(400).json({
-        message: existing.email === email.toLowerCase()
-          ? 'An account with this email already exists'
-          : 'An account with this phone number already exists'
-      });
+      if (existing.email && existing.email.toLowerCase() === cleanEmail) {
+        return res.status(400).json({ message: 'An account with this email already exists' });
+      }
+      if (cleanUsername && existing.username && existing.username.toLowerCase() === cleanUsername) {
+        return res.status(400).json({ message: 'An account with this username already exists' });
+      }
+      return res.status(400).json({ message: 'An account with this phone number already exists' });
     }
 
     // Hash password
@@ -217,8 +232,9 @@ exports.enquiryStudentSignup = async (req, res) => {
     // Create enquiry record
     const enquiry = await Enquiry.create({
       name: name.trim(),
-      email: email.toLowerCase().trim(),
+      email: cleanEmail,
       phone: phoneDigits,
+      username: cleanUsername || null,
       password: hashedPassword,
       candidateStatus: 'enquiry stage',
       global: true,
