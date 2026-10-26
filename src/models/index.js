@@ -1,5 +1,7 @@
 const { Sequelize, DataTypes } = require('sequelize');
-const config = require('../config/database').development;
+const dbConfigs = require('../config/database');
+
+const config = dbConfigs.active || dbConfigs[process.env.NODE_ENV] || dbConfigs.development;
 
 const sequelize = new Sequelize(config);
 
