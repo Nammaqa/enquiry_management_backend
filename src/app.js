@@ -62,13 +62,18 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
+  const { sequelize } = require('./models');
   res.status(200).json({
     status: 'success',
     message: 'API is healthy',
     timestamp: new Date().toISOString(),
     nodeEnv: process.env.NODE_ENV,
     nodeVersion: process.version,
-    databaseurl:process.env.DATABASE_URL
+    database: {
+      host: sequelize.config?.host || 'unknown',
+      database: sequelize.config?.database || 'unknown',
+      dialect: sequelize.config?.dialect || 'postgres',
+    },
   });
 });
 
