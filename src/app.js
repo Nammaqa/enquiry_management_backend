@@ -13,6 +13,7 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
+
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   res.header('Access-Control-Allow-Origin', origin || '*');
