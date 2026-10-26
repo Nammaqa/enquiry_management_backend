@@ -190,10 +190,13 @@ exports.getSubjectDetail = async (req, res) => {
 // Get individual instructor profile with stats
 exports.getInstructorProfile = async (req, res) => {
   try {
-    const { instructorId } = req.params;
+    let { instructorId } = req.params;
+    if (instructorId === 'me' || !instructorId) {
+      instructorId = req.user?.userId || req.user?.id;
+    }
 
     const user = await User.findByPk(instructorId, {
-      attributes: ['id', 'name', 'email', 'role'],
+      attributes: ['id', 'name', 'email', 'phone_number', 'role'],
     });
 
     if (!user || String(user.role || '').toLowerCase() !== 'instructor') {
@@ -206,7 +209,7 @@ exports.getInstructorProfile = async (req, res) => {
     const profileInclude = [{
       model: User,
       as: 'user',
-      attributes: ['id', 'name', 'email', 'role'],
+      attributes: ['id', 'name', 'email', 'phone_number', 'role'],
     }];
 
     // Find instructor with user details.
@@ -236,52 +239,79 @@ exports.getInstructorProfile = async (req, res) => {
     }
 
     // InstructorSubjects stores the User ID, not the InstructorProfile ID.
-    const instructorSubjects = await Subject.findAll({
-      include: [{
-        model: User,
-        as: 'instructors',
-        where: { id: instructorId },
-        attributes: [],
-      }],
-      attributes: ['id', 'name', 'code'],
-    });
-    const subjectsCount = instructorSubjects.length;
+    let subjectsCount = 0;
+    let instructorSubjects = [];
+    try {
+      instructorSubjects = await Subject.findAll({
+        include: [{
+          model: User,
+          as: 'instructors',
+          where: { id: instructorId },
+          attributes: [],
+        }],
+        attributes: ['id', 'name', 'code'],
+      });
+      subjectsCount = instructorSubjects.length;
+    } catch (err) {
+      console.warn('Error fetching instructor subjects:', err.message);
+    }
 
     // Count total students taught from batches (unique enquiries in batches created by this instructor)
-    const studentsCount = await sequelize.query(`
-      SELECT COUNT(DISTINCT e.id) as total_students
-      FROM enquiries e
-      INNER JOIN batches b ON e."batchId" = b.id
-      WHERE b."instructorId" = :userId
-    `, {
-      replacements: { userId: instructorId },
-      type: sequelize.QueryTypes.SELECT
-    });
+    let totalStudents = 0;
+    try {
+      const studentsCount = await sequelize.query(`
+        SELECT COUNT(DISTINCT e.id) as total_students
+        FROM enquiries e
+        INNER JOIN batches b ON e."batchId" = b.id
+        WHERE b."instructorId" = :userId
+      `, {
+        replacements: { userId: instructorId },
+        type: sequelize.QueryTypes.SELECT
+      });
+      totalStudents = parseInt(studentsCount[0]?.total_students || 0);
+    } catch (err) {
+      console.warn('Error querying studentsCount:', err.message);
+    }
 
     // Count assignments created by instructor. Assignments store this as createdBy.
-    const assignmentsCount = await Assignment.count({
-      where: { createdBy: instructorId }
-    });
+    let assignmentsCount = 0;
+    try {
+      assignmentsCount = await Assignment.count({
+        where: { createdBy: instructorId }
+      });
+    } catch (err) {
+      console.warn('Error counting assignments:', err.message);
+    }
 
     // Count mock interviews taken by instructor
-    const mockInterviewsCount = await MockInterview.count({
-      where: { instructorId }
-    });
+    let mockInterviewsCount = 0;
+    try {
+      mockInterviewsCount = await MockInterview.count({
+        where: { instructorId }
+      });
+    } catch (err) {
+      console.warn('Error counting mock interviews:', err.message);
+    }
 
     // Get average rating from feedbacks
-    const feedbackStats = await sequelize.query(`
-      SELECT 
-        ROUND(AVG(rating)::numeric, 2) as average_rating,
-        COUNT(*) as total_feedbacks
-      FROM feedbacks
-      WHERE "instructorId" = :instructorId
-    `, {
-      replacements: { instructorId },
-      type: sequelize.QueryTypes.SELECT
-    });
-
-    const averageRating = feedbackStats[0]?.average_rating || 0;
-    const totalFeedbacks = feedbackStats[0]?.total_feedbacks || 0;
+    let averageRating = 0;
+    let totalFeedbacks = 0;
+    try {
+      const feedbackStats = await sequelize.query(`
+        SELECT 
+          ROUND(AVG(rating)::numeric, 2) as average_rating,
+          COUNT(*) as total_feedbacks
+        FROM feedbacks
+        WHERE "instructorId" = :instructorId
+      `, {
+        replacements: { instructorId },
+        type: sequelize.QueryTypes.SELECT
+      });
+      averageRating = parseFloat(feedbackStats[0]?.average_rating || 0);
+      totalFeedbacks = parseInt(feedbackStats[0]?.total_feedbacks || 0);
+    } catch (err) {
+      console.warn('Error querying feedback stats:', err.message);
+    }
 
     res.status(200).json({
       success: true,
@@ -289,24 +319,26 @@ exports.getInstructorProfile = async (req, res) => {
       data: {
         id: instructor.id,
         userId: instructor.userId,
-        name: instructor.name || instructor.User?.name,
-        email: instructor.User?.email,
+        name: instructor.name || user.name,
+        email: user.email,
+        phone_number: user.phone_number,
         image: instructor.image,
         description: instructor.description,
+        bio: instructor.description,
         stats: {
           subjectsCount,
-          studentsCount: parseInt(studentsCount[0]?.total_students || 0),
+          studentsCount: totalStudents,
           assignmentsCreated: assignmentsCount,
           mockInterviewsConducted: mockInterviewsCount,
-          averageRating: parseFloat(averageRating),
-          totalFeedbacks: parseInt(totalFeedbacks)
+          averageRating: averageRating || 0,
+          totalFeedbacks: totalFeedbacks || 0
         },
         subjects: instructorSubjects
       }
     });
   } catch (error) {
     console.error('Error in getInstructorProfile:', error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -352,7 +384,7 @@ exports.getAllInstructorsProfiles = async (req, res) => {
 
         // Count assignments
         const assignmentsCount = await Assignment.count({
-          where: { instructorId: instructor.userId }
+          where: { createdBy: instructor.userId }
         });
 
         // Count mock interviews
@@ -407,98 +439,183 @@ exports.getAllInstructorsProfiles = async (req, res) => {
 // Update instructor profile
 exports.updateInstructorProfile = async (req, res) => {
   try {
-    const { instructorId } = req.params;
-    const { name, description, image } = req.body;
-
-    // Find instructor
-    const instructor = await Instructor.findOne({
-      where: { userId: instructorId }
-    });
-
-    if (!instructor) {
-      return res.status(404).json({ message: 'Instructor not found' });
+    let { instructorId } = req.params;
+    if (instructorId === 'me' || !instructorId) {
+      instructorId = req.user?.userId || req.user?.id;
     }
 
+    const {
+      name,
+      description,
+      bio,
+      image,
+      profileImage,
+      avatar,
+      phone_number,
+      phoneNumber,
+      email
+    } = req.body;
+
+    const desc = description !== undefined ? description : bio;
+    const img = image !== undefined ? image : (profileImage !== undefined ? profileImage : avatar);
+    const phone = phone_number !== undefined ? phone_number : phoneNumber;
+
+    let user = null;
+    if (instructorId) {
+      user = await User.findByPk(instructorId, {
+        attributes: ['id', 'name', 'email', 'phone_number', 'role']
+      });
+    }
+
+    // Find instructor by userId or id
+    let instructor = null;
+    if (instructorId) {
+      instructor = await Instructor.findOne({
+        where: { userId: instructorId }
+      });
+    }
+
+    if (!instructor && !user && instructorId) {
+      instructor = await Instructor.findByPk(instructorId);
+    }
+
+    if (!instructor && user) {
+      instructor = await Instructor.create({
+        userId: user.id,
+        name: user.name,
+        image: img || null,
+        description: desc || null
+      });
+    }
+
+    if (!instructor && !user) {
+      return res.status(404).json({ success: false, message: 'Instructor not found' });
+    }
+
+    const targetUserId = instructor?.userId || (user ? user.id : instructorId);
+
     // Update profile fields
-    if (name) instructor.name = name;
-    if (description) instructor.description = description;
-    if (image) instructor.image = image;
+    if (instructor) {
+      if (name !== undefined) instructor.name = name;
+      if (desc !== undefined) instructor.description = desc;
+      if (img !== undefined) instructor.image = img;
+      await instructor.save();
+    }
 
-    await instructor.save();
+    // Update user table if fields are provided
+    const userUpdates = {};
+    if (name !== undefined) userUpdates.name = name;
+    if (phone !== undefined) userUpdates.phone_number = phone || null;
+    if (email !== undefined) userUpdates.email = email;
 
-    // Fetch updated profile with stats
-    const subjectsCount = await Instructor.count({
-      where: { userId: instructorId }
-    });
+    if (Object.keys(userUpdates).length > 0 && targetUserId) {
+      await User.update(userUpdates, { where: { id: targetUserId } });
+    }
 
-    const studentsCount = await sequelize.query(`
-      SELECT COUNT(DISTINCT e.id) as total_students
-      FROM enquiries e
-      INNER JOIN batches b ON e."batchId" = b.id
-      WHERE b."instructorId" = :userId
-    `, {
-      replacements: { userId: instructorId },
-      type: sequelize.QueryTypes.SELECT
-    });
+    // Fetch subjects assigned to instructor safely
+    let subjectsCount = 0;
+    let instructorSubjects = [];
+    try {
+      instructorSubjects = await Subject.findAll({
+        include: [{
+          model: User,
+          as: 'instructors',
+          where: { id: targetUserId },
+          attributes: [],
+        }],
+        attributes: ['id', 'name', 'code'],
+      });
+      subjectsCount = instructorSubjects.length;
+    } catch (err) {
+      console.warn('Error fetching instructor subjects:', err.message);
+    }
 
-    const assignmentsCount = await Assignment.count({
-      where: { instructorId }
-    });
+    let totalStudents = 0;
+    try {
+      const studentsCount = await sequelize.query(`
+        SELECT COUNT(DISTINCT e.id) as total_students
+        FROM enquiries e
+        INNER JOIN batches b ON e."batchId" = b.id
+        WHERE b."instructorId" = :userId
+      `, {
+        replacements: { userId: targetUserId },
+        type: sequelize.QueryTypes.SELECT
+      });
+      totalStudents = parseInt(studentsCount[0]?.total_students || 0);
+    } catch (err) {
+      console.warn('Error querying studentsCount:', err.message);
+    }
 
-    const mockInterviewsCount = await MockInterview.count({
-      where: { instructorId }
-    });
+    let assignmentsCount = 0;
+    try {
+      assignmentsCount = await Assignment.count({
+        where: { createdBy: targetUserId }
+      });
+    } catch (err) {
+      console.warn('Error counting assignments:', err.message);
+    }
 
-    const feedbackStats = await sequelize.query(`
-      SELECT 
-        ROUND(AVG(rating)::numeric, 2) as average_rating,
-        COUNT(*) as total_feedbacks
-      FROM feedbacks
-      WHERE "instructorId" = :instructorId
-    `, {
-      replacements: { instructorId },
-      type: sequelize.QueryTypes.SELECT
-    });
+    let mockInterviewsCount = 0;
+    try {
+      mockInterviewsCount = await MockInterview.count({
+        where: { instructorId: targetUserId }
+      });
+    } catch (err) {
+      console.warn('Error counting mock interviews:', err.message);
+    }
 
-    const updatedInstructor = await Instructor.findOne({
-      where: { userId: instructorId },
-      include: [{
-        model: User,
-        as: 'user',
-        attributes: ['id', 'name', 'email']
-      }, {
-        model: Subject,
-        through: { attributes: [] },
-        attributes: ['id', 'name', 'code']
-      }]
+    let averageRating = 0;
+    let totalFeedbacks = 0;
+    try {
+      const feedbackStats = await sequelize.query(`
+        SELECT 
+          ROUND(AVG(rating)::numeric, 2) as average_rating,
+          COUNT(*) as total_feedbacks
+        FROM feedbacks
+        WHERE "instructorId" = :instructorId
+      `, {
+        replacements: { instructorId: targetUserId },
+        type: sequelize.QueryTypes.SELECT
+      });
+      averageRating = parseFloat(feedbackStats[0]?.average_rating || 0);
+      totalFeedbacks = parseInt(feedbackStats[0]?.total_feedbacks || 0);
+    } catch (err) {
+      console.warn('Error querying feedback stats:', err.message);
+    }
+
+    const updatedUser = await User.findByPk(targetUserId, {
+      attributes: ['id', 'name', 'email', 'phone_number', 'role']
     });
 
     res.status(200).json({
       success: true,
       message: 'Instructor profile updated successfully',
       data: {
-        id: updatedInstructor.id,
-        userId: updatedInstructor.userId,
-        name: updatedInstructor.name || updatedInstructor.User?.name,
-        email: updatedInstructor.User?.email,
-        image: updatedInstructor.image,
-        description: updatedInstructor.description,
+        id: instructor?.id,
+        userId: targetUserId,
+        name: instructor?.name || updatedUser?.name,
+        email: updatedUser?.email,
+        phone_number: updatedUser?.phone_number,
+        image: instructor?.image || null,
+        description: instructor?.description || null,
+        bio: instructor?.description || null,
         stats: {
           subjectsCount,
-          studentsCount: parseInt(studentsCount[0]?.total_students || 0),
+          studentsCount: totalStudents,
           assignmentsCreated: assignmentsCount,
           mockInterviewsConducted: mockInterviewsCount,
-          averageRating: parseFloat(feedbackStats[0]?.average_rating || 0),
-          totalFeedbacks: parseInt(feedbackStats[0]?.total_feedbacks || 0)
+          averageRating: averageRating || 0,
+          totalFeedbacks: totalFeedbacks || 0
         },
-        subjects: updatedInstructor.subjects || []
+        subjects: instructorSubjects
       }
     });
   } catch (error) {
     console.error('Error in updateInstructorProfile:', error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 // Get all assignments by subject ID
 exports.getAssignmentsBySubject = async (req, res) => {

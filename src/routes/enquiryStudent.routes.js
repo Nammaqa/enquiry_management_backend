@@ -21,6 +21,22 @@ router.post('/login', enquiryStudentController.enquiryStudentLogin);
  */
 router.get('/validate-token', enquiryAuth, enquiryStudentController.validateToken);
 
+// Public verification and check aliases for mobile students
+const mobileAuthController = require('../controllers/mobile/auth.controller');
+router.post('/check-student-exists', mobileAuthController.checkStudentExists);
+router.post('/check-user-exists', mobileAuthController.checkUserExists);
+router.get('/check-student-exists', mobileAuthController.checkStudentExists);
+router.get('/check-user-exists', mobileAuthController.checkUserExists);
+router.post('/send-otp', mobileAuthController.sendRegistrationOTP);
+router.post('/send-phone-otp', mobileAuthController.sendRegistrationOTP);
+router.post('/send-mobile-otp', mobileAuthController.sendRegistrationOTP);
+router.post('/send-email-otp', mobileAuthController.sendRegistrationOTP);
+router.post('/resend-signup-otp', mobileAuthController.resendSignupOTP);
+router.post('/verify-otp', mobileAuthController.verifyOTP);
+router.post('/verify-email-otp', mobileAuthController.verifyOTP);
+router.post('/verify-phone-otp', mobileAuthController.verifyOTP);
+router.post('/verify-mobile-otp', mobileAuthController.verifyOTP);
+
 /**
  * PROTECTED ROUTES - Require Enquiry Student Authentication
  */
@@ -43,6 +59,14 @@ router.get('/classmates', enquiryStudentController.getClassmates);
  * GET /api/enquiry-students/enrollment
  */
 router.get('/enrollment', enquiryStudentController.getEnrollmentDetails);
+
+/**
+ * GET and PUT the authenticated student's NAcademy interests
+ * GET /api/enquiry-students/interests
+ * PUT /api/enquiry-students/interests
+ */
+router.get('/interests', enquiryStudentController.getStudentInterests);
+router.put('/interests', enquiryStudentController.saveStudentInterests);
 
 /**
  * PUT update student profile

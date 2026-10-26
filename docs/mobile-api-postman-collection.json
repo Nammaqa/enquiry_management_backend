@@ -1,0 +1,602 @@
+{
+  "info": {
+    "_postman_id": "7b8e1a3c-5e92-4f38-8c12-98e3b2e5421a",
+    "name": "NammaQA Mobile App API Collection",
+    "description": "Postman API collection for the NammaQA Mobile Application, featuring email verification, OTP authentication, classroom, batches, attendance, and assignments.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "studentId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "batchId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication & Email Verification",
+      "description": "Endpoints for mobile registration, dual-channel OTP (Email & SMS), verification, and login.",
+      "item": [
+        {
+          "name": "Signup (Triggers Email & SMS OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"John Doe\",\n  \"email\": \"johndoe@example.com\",\n  \"phone_number\": \"9876543210\",\n  \"password\": \"Password@123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "auth", "signup"]
+            },
+            "description": "Registers a new student account in Enquiry table and immediately sends a 6-digit verification OTP to the user's email and phone."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"OTP sent successfully to your email and phone\",\n  \"deliveredTo\": [\n    \"email\",\n    \"phone\"\n  ],\n  \"student\": {\n    \"id\": 45,\n    \"name\": \"John Doe\",\n    \"email\": \"johndoe@example.com\",\n    \"phone_number\": \"9876543210\"\n  },\n  \"enquiryId\": 45,\n  \"reference_id\": 12,\n  \"expiresIn\": \"10 minutes\",\n  \"next\": \"Verify OTP using /api/mobile/auth/verify-otp endpoint\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Verify OTP (Email or Phone)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.token) {",
+                  "        pm.collectionVariables.set('token', jsonData.token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"johndoe@example.com\",\n  \"otp_code\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/verify-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "auth", "verify-otp"]
+            },
+            "description": "Verifies 6-digit OTP code against email, phone number, or student_id. Marks isSignupVerified = true and returns JWT token."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"message\": \"OTP verified successfully\",\n  \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n  \"student\": {\n    \"id\": 45,\n    \"name\": \"John Doe\",\n    \"email\": \"johndoe@example.com\",\n    \"phone_number\": \"9876543210\",\n    \"candidateStatus\": \"enquiry stage\",\n    \"classroomEligible\": false\n  },\n  \"enquiryId\": 45\n}"
+            }
+          ]
+        },
+        {
+          "name": "Verify Email OTP (Direct Alias)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"johndoe@example.com\",\n  \"otp_code\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/verify-email-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "auth", "verify-email-otp"]
+            },
+            "description": "Dedicated alias route for mobile developers to verify email OTP."
+          }
+        },
+        {
+          "name": "Resend Signup OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"johndoe@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/resend-signup-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "auth", "resend-signup-otp"]
+            },
+            "description": "Generates a fresh 6-digit OTP and resends it to the student's email and phone."
+          }
+        },
+        {
+          "name": "Send Email OTP (Direct Alias)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"johndoe@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/send-email-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "auth", "send-email-otp"]
+            },
+            "description": "Dedicated route to request or resend an email verification OTP."
+          }
+        },
+        {
+          "name": "Send Login OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"johndoe@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/send-login-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "auth", "send-login-otp"]
+            },
+            "description": "Sends a login OTP to registered email or phone number for passwordless authentication."
+          }
+        },
+        {
+          "name": "Mobile Login (Password or OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"johndoe@example.com\",\n  \"password\": \"Password@123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "auth", "login"]
+            },
+            "description": "Logs in student using either (1) email/phone + password or (2) email/phone + otp_code."
+          }
+        },
+        {
+          "name": "Check Student Account Exists",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone_number\": \"9876543210\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/check-student-exists",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "auth", "check-student-exists"]
+            },
+            "description": "Checks if an account exists for given phone number before navigating to login or signup screen."
+          }
+        },
+        {
+          "name": "Enroll Student into Course",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enquiryId\": 45,\n  \"packageId\": 2,\n  \"trainingMode\": \"online\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mobile/auth/enroll",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mobile", "auth", "enroll"]
+            },
+            "description": "Enrolls verified student into a package. Requires Bearer Token."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Student Classroom & Profile",
+      "description": "Student dashboard, profile, and classroom endpoints.",
+      "item": [
+        {
+          "name": "Validate Token",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/enquiry-students/validate-token",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "enquiry-students", "validate-token"]
+            },
+            "description": "Validates the current session token on mobile app startup."
+          }
+        },
+        {
+          "name": "Get Student Classroom Dashboard",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/enquiry-students/classroom",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "enquiry-students", "classroom"]
+            },
+            "description": "Returns student batch, assigned instructor, package, and enrollment details."
+          }
+        },
+        {
+          "name": "Get Classmates",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/enquiry-students/classmates",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "enquiry-students", "classmates"]
+            },
+            "description": "Returns the list of peers and students enrolled in the same batch."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Batches & Packages",
+      "description": "Curriculum, course packages, and student batch details.",
+      "item": [
+        {
+          "name": "Get Student Batches",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/student-batches",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student-batches"]
+            },
+            "description": "Lists all active/completed batches the authenticated student is assigned to."
+          }
+        },
+        {
+          "name": "Get Batch Details",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/student-batches/{{batchId}}/details",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "student-batches", "{{batchId}}", "details"]
+            },
+            "description": "Retrieves comprehensive batch schedule, instructor details, and subject curriculum."
+          }
+        },
+        {
+          "name": "List Available Packages",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/packages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "packages"]
+            },
+            "description": "Public catalog of all course packages with duration, syllabus, and subjects."
+          }
+        },
+        {
+          "name": "Get Package by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/packages/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "packages", "1"]
+            },
+            "description": "Returns full details of a specific package."
+          }
+        },
+        {
+          "name": "List Package Domains",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/packages/domains",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "packages", "domains"]
+            },
+            "description": "Returns all unique domains (Testing, Development, Cybersecurity, etc.) for app category filters."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Attendance Management",
+      "description": "QR attendance scanning and student attendance logs.",
+      "item": [
+        {
+          "name": "Mark Attendance (Scan QR Code)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batchId\": 1,\n  \"qrToken\": \"eyJhbGciOiJIUzI1Ni...\",\n  \"latitude\": 12.9716,\n  \"longitude\": 77.5946\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/attendance/mark",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attendance", "mark"]
+            },
+            "description": "Called by mobile app after scanning the instructor's classroom QR code."
+          }
+        },
+        {
+          "name": "Get My Attendance Record",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/attendance/student",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "attendance", "student"]
+            },
+            "description": "Returns the student's attendance percentage, present days, and past check-ins."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Assignments & Materials",
+      "description": "Batch study materials and assignment submissions.",
+      "item": [
+        {
+          "name": "Get Batch Study Materials",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/materials/batch/{{batchId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "materials", "batch", "{{batchId}}"]
+            },
+            "description": "Retrieves PDF notes, slides, and links uploaded for the batch."
+          }
+        },
+        {
+          "name": "Get My Assignment Submissions",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/assignment-responses/my-submissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "assignment-responses", "my-submissions"]
+            },
+            "description": "Lists all assignments submitted by the authenticated student along with grading and feedback."
+          }
+        },
+        {
+          "name": "Submit Assignment Response",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "multipart/form-data"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "assignmentId",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "comment",
+                  "value": "Completed test cases and bug report",
+                  "type": "text"
+                },
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/assignment-responses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "assignment-responses"]
+            },
+            "description": "Submits homework/project files (PDF, ZIP, DOCX) for instructor grading."
+          }
+        }
+      ]
+    }
+  ]
+}

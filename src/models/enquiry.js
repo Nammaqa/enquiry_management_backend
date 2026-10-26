@@ -13,6 +13,10 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.STRING(100),
                 allowNull: false,
             },
+            username: {
+                type: DataTypes.STRING(255),
+                allowNull: true,
+            },
             email: {
                 type: DataTypes.STRING,
                 allowNull: false,
@@ -65,6 +69,25 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.ARRAY(DataTypes.INTEGER),
                 allowNull: true,
                 defaultValue: [],
+            },
+            learningFields: {
+                type: DataTypes.ARRAY(DataTypes.STRING),
+                allowNull: false,
+                defaultValue: [],
+            },
+            occupations: {
+                type: DataTypes.ARRAY(DataTypes.STRING),
+                allowNull: false,
+                defaultValue: [],
+            },
+            skills: {
+                type: DataTypes.ARRAY(DataTypes.STRING),
+                allowNull: false,
+                defaultValue: [],
+            },
+            interestsCompletedAt: {
+                type: DataTypes.DATE,
+                allowNull: true,
             },
             trainingMode: {
                 type: DataTypes.STRING(50),

@@ -18,6 +18,7 @@ if (process.env.DATABASE_URL) {
       ssl: {
         rejectUnauthorized: false,
       },
+      keepAlive: true,
     },
   };
 } else {
@@ -35,10 +36,11 @@ if (process.env.DATABASE_URL) {
 }
 
 config.pool = {
-  max: 10,
+  max: 5,
   min: 0,
-  acquire: 60000,
-  idle: 10000,
+  acquire: 15000,
+  idle: 5000,
+  evict: 5000,
 };
 
 config.logging = process.env.NODE_ENV === 'development' ? console.log : false;

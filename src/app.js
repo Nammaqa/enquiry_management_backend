@@ -93,30 +93,39 @@ app.get('/api/debug', async (req, res) => {
   }
 });
 
-app.use('/api/auth', require('./routes/auth.routes'));
-app.use('/api/mobile/auth', require('./routes/mobile/auth.routes'));
-app.use('/api/users', require('./routes/user.routes'));
-app.use('/api/packages', require('./routes/package.routes'));
-app.use('/api/subjects', require('./routes/subject.routes'));
-app.use('/api/instructors', require('./routes/instructor.routes'));
-app.use('/api/batches', require('./routes/batch.routes'));
-app.use('/api/assignments', require('./routes/assignment.routes'));
-app.use('/api/assignment-responses', require('./routes/assignmentresponse.routes'));
-app.use('/api/mock-interviews', require('./routes/mockInterview.routes'));
-app.use('/api/reviews', require('./routes/review.routes'));
-app.use('/api/enquiries', require('./routes/enquiry.routes'));
-app.use('/api/enquiry-students', require('./routes/enquiryStudent.routes'));
-app.use('/api/logs', require('./routes/log.routes'));
-app.use('/api/billings', require('./routes/billing.routes'));
-app.use('/api/materials', require('./routes/material.routes'));
-app.use('/api/feedbacks', require('./routes/feedback.routes'));
-app.use('/api/instructor-subjects', require('./routes/instructorsubject.routes'));
-app.use('/api/student-batches', require('./routes/studentbatch.routes'));
-app.use('/api/class-feed', require('./routes/classfeed.routes'));
-app.use('/api/class-feedback', require('./routes/classFeedback.routes'));
-app.use('/api/attendance', require('./routes/attendance.routes'));
-app.use('/api/job-posts', require('./routes/jobPost.routes'));
-app.use('/api/user-placement', require('./routes/userplacementdetails.routes'));
+// Mount routes with both /api and /api/v1 prefixes
+const routes = [
+  ['auth', require('./routes/auth.routes')],
+  ['mobile/auth', require('./routes/mobile/auth.routes')],
+  ['users', require('./routes/user.routes')],
+  ['packages', require('./routes/package.routes')],
+  ['subjects', require('./routes/subject.routes')],
+  ['instructors', require('./routes/instructor.routes')],
+  ['batches', require('./routes/batch.routes')],
+  ['assignments', require('./routes/assignment.routes')],
+  ['assignment-responses', require('./routes/assignmentresponse.routes')],
+  ['mock-interviews', require('./routes/mockInterview.routes')],
+  ['reviews', require('./routes/review.routes')],
+  ['enquiries', require('./routes/enquiry.routes')],
+  ['enquiry-students', require('./routes/enquiryStudent.routes')],
+  ['logs', require('./routes/log.routes')],
+  ['billings', require('./routes/billing.routes')],
+  ['materials', require('./routes/material.routes')],
+  ['feedbacks', require('./routes/feedback.routes')],
+  ['instructor-subjects', require('./routes/instructorsubject.routes')],
+  ['student-batches', require('./routes/studentbatch.routes')],
+  ['class-feed', require('./routes/classfeed.routes')],
+  ['class-feedback', require('./routes/classFeedback.routes')],
+  ['attendance', require('./routes/attendance.routes')],
+  ['job-posts', require('./routes/jobPost.routes')],
+  ['user-placement', require('./routes/userplacementdetails.routes')],
+];
+
+routes.forEach(([path, router]) => {
+  app.use(`/api/${path}`, router);
+  app.use(`/api/v1/${path}`, router);
+});
+
 
 // 404 handler
 app.use((req, res) => {

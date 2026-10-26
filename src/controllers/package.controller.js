@@ -1,4 +1,5 @@
-const { Package, Subject } = require('../models');
+const { Package, Subject, Sequelize } = require('../models');
+const { Op } = Sequelize;
 const { uploadImage, deleteImage } = require('../utils/cloudinary');
 const { Formidable } = require('formidable');
 const fs = require('fs');
@@ -208,10 +209,30 @@ exports.createPackage = async (req, res) => {
 
 /**
  * GET all packages (ALL ROLES)
+ * Supports query parameter ?domain=... or ?domainInterest=... to filter packages by domain
  */
 exports.getAllPackages = async (req, res) => {
   try {
+    const domain = req.query.domain || req.query.domainInterest || req.query.interest;
+    const where = {};
+
+    if (domain && typeof domain === 'string' && domain.trim()) {
+      const trimmedDomain = domain.trim();
+      where[Op.or] = [
+        Sequelize.where(
+          Sequelize.fn('LOWER', Sequelize.fn('TRIM', Sequelize.col('Package.domain'))),
+          trimmedDomain.toLowerCase()
+        ),
+        {
+          domain: {
+            [Op.iLike]: `%${trimmedDomain}%`,
+          },
+        },
+      ];
+    }
+
     const packages = await Package.findAll({
+      where,
       attributes: ['id', 'name', 'code', 'description', 'type', 'duration', 'image', 'overview', 'syllabus', 'prerequisites', 'startDate', 'domain', 'mode', 'createdAt', 'updatedAt'],
       include: {
         model: Subject,
@@ -219,11 +240,109 @@ exports.getAllPackages = async (req, res) => {
         attributes: ['id', 'name', 'code'],
         through: { attributes: [] },
       },
+      order: [['id', 'ASC']],
     });
     return res.status(200).json(packages);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * GET packages by domain (ALL ROLES)
+ * Route: GET /api/packages/domain/:domain OR GET /api/packages/domain?domain=xxx
+ */
+exports.getPackagesByDomain = async (req, res) => {
+  try {
+    const domain = req.params.domain || req.query.domain || req.query.domainInterest || req.query.interest;
+
+    if (!domain || typeof domain !== 'string' || !domain.trim()) {
+      return res.status(400).json({
+        message: 'Domain parameter is required',
+      });
+    }
+
+    const trimmedDomain = domain.trim();
+    const packages = await Package.findAll({
+      where: {
+        [Op.or]: [
+          Sequelize.where(
+            Sequelize.fn('LOWER', Sequelize.fn('TRIM', Sequelize.col('Package.domain'))),
+            trimmedDomain.toLowerCase()
+          ),
+          {
+            domain: {
+              [Op.iLike]: `%${trimmedDomain}%`,
+            },
+          },
+        ],
+      },
+      attributes: [
+        'id',
+        'name',
+        'code',
+        'description',
+        'type',
+        'duration',
+        'image',
+        'overview',
+        'syllabus',
+        'prerequisites',
+        'startDate',
+        'domain',
+        'mode',
+        'createdAt',
+        'updatedAt',
+      ],
+      include: {
+        model: Subject,
+        as: 'subjects',
+        attributes: ['id', 'name', 'code'],
+        through: { attributes: [] },
+      },
+      order: [['id', 'ASC']],
+    });
+
+    return res.status(200).json(packages);
+  } catch (error) {
+    console.error('Error fetching packages by domain:', error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+/**
+ * GET all unique domains for packages (ALL ROLES)
+ * Route: GET /api/packages/domains
+ */
+exports.getAllPackageDomains = async (req, res) => {
+  try {
+    const packages = await Package.findAll({
+      attributes: [[Sequelize.fn('DISTINCT', Sequelize.col('domain')), 'domain']],
+      where: {
+        domain: {
+          [Op.ne]: null,
+        },
+      },
+      raw: true,
+    });
+
+    const domainSet = new Set();
+    packages.forEach((pkg) => {
+      if (pkg.domain && typeof pkg.domain === 'string') {
+        pkg.domain
+          .split(',')
+          .map((d) => d.trim())
+          .filter(Boolean)
+          .forEach((d) => domainSet.add(d));
+      }
+    });
+
+    const domains = Array.from(domainSet).sort();
+    return res.status(200).json(domains);
+  } catch (error) {
+    console.error('Error fetching package domains:', error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 

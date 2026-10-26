@@ -32,7 +32,13 @@ router.get(
   instructorController.getSubjectDetail
 );
 
-// Get individual instructor profile with stats and details
+// Get individual instructor profile with stats and details (by ID or current user)
+router.get(
+  '/profile',
+  auth,
+  instructorController.getInstructorProfile
+);
+
 router.get(
   '/profile/:instructorId',
   auth,
@@ -48,10 +54,29 @@ router.get(
 
 // Update instructor profile (name, description, image)
 router.put(
+  '/profile',
+  auth,
+  instructorController.updateInstructorProfile
+);
+
+router.patch(
+  '/profile',
+  auth,
+  instructorController.updateInstructorProfile
+);
+
+router.put(
   '/profile/:instructorId',
   auth,
   instructorController.updateInstructorProfile
 );
+
+router.patch(
+  '/profile/:instructorId',
+  auth,
+  instructorController.updateInstructorProfile
+);
+
 
 // Get all assignments by subject ID
 router.get(

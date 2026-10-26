@@ -1,4 +1,5 @@
-const { User, OTP } = require('../models');
+const { User, OTP, Enquiry } = require('../models');
+const { Op } = require('sequelize');
 const { comparePassword } = require('../utils/password');
 const { signToken } = require('../config/jwt');
 
@@ -23,15 +24,16 @@ const buildLoginResponse = (user, token) => ({
   role: user.role,
 });
 
-exports.login = async (req, res) => {
+exports.sendLoginOTP = async (req, res) => {
   try {
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required' });
+    const { phone_number } = req.body;
+    const normalizedPhone = normalizePhoneNumber(phone_number);
+
+    if (!normalizedPhone) {
+      return res.status(400).json({ message: 'Phone number is required' });
     }
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ where: { phone_number: normalizedPhone } });
     if (!user) {
       return res.status(404).json({ message: 'Instructor not found' });
     }
@@ -83,48 +85,48 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    if (normalizedEmail && password && !normalizedPhone && !otp_code) {
-      const user = await User.findOne({ where: { email: normalizedEmail } });
-      if (!user) {
-        return res.status(401).json({ message: 'Invalid credentials' });
-      }
-
-      const isValid = await comparePassword(password, user.password);
-      if (!isValid) {
-        return res.status(401).json({ message: 'Invalid credentials' });
-      }
-
-      const token = await signToken({
-        userId: user.id,
-        name: user.name,
-        email: user.email,
-        phone_number: user.phone_number,
-        role: user.role,
+    let user = await User.findOne({ where: { email: normalizedEmail } });
+    if (!user) {
+      // Also check Enquiry table for global users / students
+      const enquiry = await Enquiry.findOne({
+        where: {
+          [Op.or]: [
+            { email: normalizedEmail },
+            ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+          ],
+        },
       });
 
-      return res.json(buildLoginResponse(user, token));
+      if (enquiry && enquiry.password) {
+        user = {
+          id: enquiry.id,
+          name: enquiry.name,
+          email: enquiry.email,
+          phone_number: enquiry.phone,
+          password: enquiry.password,
+          role: 'student',
+        };
+      }
+    }
+
+    if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-      const isValid = await comparePassword(password, user.password);
-      if (!isValid) {
-        return res.status(401).json({ message: 'Invalid credentials' });
-      }
+    const isValid = await comparePassword(password, user.password);
+    if (!isValid) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
 
     const token = await signToken({
       userId: user.id,
       name: user.name,
       email: user.email,
+      phone_number: user.phone_number,
       role: user.role,
     });
 
-    return res.json({
-      message: 'Login successful',
-      token,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    });
+    return res.json(buildLoginResponse(user, token));
   } catch (error) {
     console.error('Login error:', error);
     return res.status(500).json({ message: 'Server error', error: error.message });
