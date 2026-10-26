@@ -253,22 +253,41 @@ exports.enquiryStudentSignup = async (req, res) => {
  */
 exports.enquiryStudentLogin = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, phone, phone_number, username } = req.body;
+    const rawIdentifier = (email || phone || phone_number || username || '').trim();
 
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required' });
+    if (!rawIdentifier || !password) {
+      return res.status(400).json({ message: 'Email/Phone and password are required' });
     }
 
-    // Find enquiry by email first (to validate password before checking status)
-    const enquiry = await Enquiry.findOne({ where: { email } });
+    const normalizedEmail = rawIdentifier.toLowerCase();
+    const cleanPhone = String(rawIdentifier).replace(/\D/g, '');
+
+    const enquiryOr = [
+      { email: { [Op.iLike]: normalizedEmail } },
+      { username: { [Op.iLike]: rawIdentifier } },
+    ];
+    if (cleanPhone && cleanPhone.length >= 7) {
+      enquiryOr.push({ phone: cleanPhone.length > 10 ? cleanPhone.slice(-10) : cleanPhone });
+    }
+
+    // Find enquiry by email, phone, or username
+    const enquiry = await Enquiry.findOne({
+      where: { [Op.or]: enquiryOr },
+    });
 
     if (!enquiry) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    if (!enquiry.password) {
+      return res.status(401).json({
+        message: 'No password is set for this account. Please complete signup or contact admin.',
+      });
+    }
+
     // Validate password using the model's comparePassword method
     const isPasswordValid = await enquiry.comparePassword(password);
-    console.log(isPasswordValid);
     if (!isPasswordValid) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }

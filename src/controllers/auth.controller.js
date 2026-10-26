@@ -77,27 +77,46 @@ exports.resendLoginOTP = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { email, password, phone_number, otp_code } = req.body;
-    const normalizedEmail = email ? String(email).trim().toLowerCase() : null;
-    const normalizedPhone = normalizePhoneNumber(phone_number);
+    const { email, password, phone_number, phone, username } = req.body;
+    const rawIdentifier = (email || phone_number || phone || username || '').trim();
 
-    if (!normalizedEmail || !password || normalizedPhone || otp_code) {
-      return res.status(400).json({ message: 'Email and password are required' });
+    if (!rawIdentifier || !password) {
+      return res.status(400).json({ message: 'Email/Phone and password are required' });
     }
 
-    let user = await User.findOne({ where: { email: normalizedEmail } });
+    const normalizedEmail = rawIdentifier.toLowerCase();
+    const cleanPhone = normalizePhoneNumber(phone_number || phone || rawIdentifier);
+
+    // Build conditions for User table
+    const userOr = [{ email: { [Op.iLike]: normalizedEmail } }];
+    if (cleanPhone && cleanPhone.length >= 7) {
+      userOr.push({ phone_number: cleanPhone });
+    }
+
+    let user = await User.findOne({
+      where: { [Op.or]: userOr },
+    });
+
     if (!user) {
       // Also check Enquiry table for global users / students
+      const enquiryOr = [
+        { email: { [Op.iLike]: normalizedEmail } },
+        { username: { [Op.iLike]: rawIdentifier } },
+      ];
+      if (cleanPhone && cleanPhone.length >= 7) {
+        enquiryOr.push({ phone: cleanPhone });
+      }
+
       const enquiry = await Enquiry.findOne({
-        where: {
-          [Op.or]: [
-            { email: normalizedEmail },
-            ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
-          ],
-        },
+        where: { [Op.or]: enquiryOr },
       });
 
-      if (enquiry && enquiry.password) {
+      if (enquiry) {
+        if (!enquiry.password) {
+          return res.status(401).json({
+            message: 'No password is set for this account. Please complete signup or contact admin.',
+          });
+        }
         user = {
           id: enquiry.id,
           name: enquiry.name,

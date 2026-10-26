@@ -29,3 +29,4 @@ module.exports = {
     await queryInterface.bulkDelete('users', { email: 'admin@example.com' }, {});
   }
 };
+
