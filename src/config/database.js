@@ -49,12 +49,12 @@ function parseConfigFromUrl(rawUrl, isDev = false) {
 }
 
 function isTestEnvironment() {
-  if (process.env.USE_TEST_DB === 'true') return true;
-  if (process.env.USE_PROD_DB === 'true') return false;
-
   const vercelEnvironment = (process.env.VERCEL_ENV || '').toLowerCase();
   if (vercelEnvironment === 'production') return false;
   if (['preview', 'development'].includes(vercelEnvironment)) return true;
+
+  if (process.env.USE_TEST_DB === 'true') return true;
+  if (process.env.USE_PROD_DB === 'true') return false;
 
   const appEnv = (process.env.APP_ENV || '').toLowerCase();
   if (['development', 'test', 'testing', 'staging', 'dev'].includes(appEnv)) return true;
