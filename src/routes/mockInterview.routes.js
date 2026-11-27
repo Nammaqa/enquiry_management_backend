@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const mockInterviewController = require('../controllers/mockInterview.controller');
 const auth = require('../middlewares/auth.middleware');
+const enquiryAuth = require('../middlewares/enquiryAuth.middleware');
+
+// POST: Student books a self-serve mock interview slot
+router.post('/student-book', enquiryAuth, mockInterviewController.studentBookMockInterview);
 
 // POST: Schedule a mock interview for a batch student
 router.post('/schedule', auth, mockInterviewController.scheduleMockInterview);

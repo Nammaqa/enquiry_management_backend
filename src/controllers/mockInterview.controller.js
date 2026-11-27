@@ -665,3 +665,102 @@ exports.deleteMockInterview = async (req, res) => {
     });
   }
 };
+
+// POST API: Student books a self-serve mock interview slot for their batch
+exports.studentBookMockInterview = async (req, res) => {
+  try {
+    const enquiryId = req.enquiry?.enquiryId;
+    if (!enquiryId) {
+      return res.status(401).json({ success: false, message: 'Student authentication required' });
+    }
+
+    const { batchId, interviewDate, interviewTime, mode } = req.body || {};
+    const parsedBatchId = parseInt(batchId, 10);
+
+    if (!parsedBatchId || Number.isNaN(parsedBatchId) || !interviewDate || !interviewTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'batchId, interviewDate, and interviewTime are required',
+      });
+    }
+
+    const normalizedMode = String(mode || 'online').toLowerCase();
+    if (!['online', 'offline'].includes(normalizedMode)) {
+      return res.status(400).json({
+        success: false,
+        message: 'mode must be either "online" or "offline"',
+      });
+    }
+
+    const batch = await Batch.findByPk(parsedBatchId);
+    if (!batch) {
+      return res.status(404).json({ success: false, message: 'Batch not found' });
+    }
+
+    const student = await Enquiry.findByPk(enquiryId, {
+      include: [
+        {
+          model: Batch,
+          as: 'enrolledBatches',
+          where: { id: parsedBatchId },
+          required: false,
+          through: { attributes: [] },
+          attributes: ['id'],
+        },
+      ],
+    });
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    const isEnrolled =
+      Number(student.batchId) === parsedBatchId ||
+      (Array.isArray(student.enrolledBatches) && student.enrolledBatches.length > 0);
+
+    if (!isEnrolled) {
+      return res.status(403).json({ success: false, message: 'You are not enrolled in this batch' });
+    }
+
+    const instructorId = batch.instructorId || batch.createdBy;
+    if (!instructorId) {
+      return res.status(400).json({ success: false, message: 'No instructor assigned to this batch yet' });
+    }
+
+    let interviewLink = null;
+    if (normalizedMode === 'online') {
+      const chars = 'abcdefghijklmnopqrstuvwxyz';
+      const rand = (len) => Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+      interviewLink = `https://meet.google.com/${rand(3)}-${rand(4)}-${rand(3)}`;
+    }
+
+    const created = await MockInterview.create({
+      batchId: parsedBatchId,
+      enquiryId,
+      instructorId,
+      studentName: student.name,
+      studentEmail: student.email,
+      interviewDate,
+      interviewTime,
+      mode: normalizedMode,
+      interviewLink,
+      status: 'scheduled',
+    });
+
+    const withIncludes = await MockInterview.findByPk(created.id, {
+      include: [
+        { model: User, as: 'instructor', attributes: ['id', 'name', 'email'] },
+        { model: Batch, as: 'batch', attributes: ['id', 'name', 'code'] },
+      ],
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Mock interview slot booked successfully',
+      data: withIncludes,
+    });
+  } catch (error) {
+    console.error('Error in studentBookMockInterview:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};

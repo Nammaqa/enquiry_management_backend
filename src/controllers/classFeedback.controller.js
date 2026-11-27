@@ -58,10 +58,18 @@ exports.submitFeedback = async (req, res) => {
 
         // 4. Create Feedback
         // Note: Feedback model uses instructorId from the batch
+        const instructorId = batch.instructorId || batch.createdBy;
+        if (!instructorId) {
+            return res.status(400).json({
+                success: false,
+                message: 'No instructor is assigned to this batch yet.'
+            });
+        }
+
         const feedback = await Feedback.create({
             enquiryId: student.id,
             batchId: batch.id,
-            instructorId: batch.instructorId,
+            instructorId,
             rating: rating,
             feedbackText: feedbackText ? [feedbackText] : [] // model expects array
         });
@@ -105,6 +113,11 @@ exports.getBatchFeedback = async (req, res) => {
                 {
                     model: Enquiry,
                     as: 'enquiry',
+                    attributes: ['id', 'name', 'email']
+                },
+                {
+                    model: User,
+                    as: 'instructor',
                     attributes: ['id', 'name', 'email']
                 }
             ],
