@@ -36,6 +36,7 @@ db.Project = require('./project')(sequelize, DataTypes);
 db.StudentPlacementApplied = require('./studentPlacementApplied')(sequelize, DataTypes);
 db.OTP = require('./otp')(sequelize, DataTypes);
 db.BillingPaymentHistory = require('./billingpaymenthistory')(sequelize, DataTypes);
+db.Doubt = require('./doubt')(sequelize, DataTypes);
 
 // ONE-TO-ONE: InstructorProfile belongs to its User account
 db.User.hasOne(db.Instructor, {
@@ -522,5 +523,21 @@ db.StudentPlacementApplied.belongsTo(db.JobPost, { foreignKey: 'jobPostId', as: 
 
 db.Placement.hasMany(db.StudentPlacementApplied, { foreignKey: 'userPlacementDetailId', as: 'jobApplications' });
 db.StudentPlacementApplied.belongsTo(db.Placement, { foreignKey: 'userPlacementDetailId', as: 'userPlacementDetail' });
+
+// DOUBTS
+db.Batch.hasMany(db.Doubt, { foreignKey: 'batchId', as: 'doubts', onDelete: 'CASCADE' });
+db.Doubt.belongsTo(db.Batch, { foreignKey: 'batchId', as: 'batch' });
+
+db.Enquiry.hasMany(db.Doubt, { foreignKey: 'enquiryId', as: 'doubts', onDelete: 'CASCADE' });
+db.Doubt.belongsTo(db.Enquiry, { foreignKey: 'enquiryId', as: 'enquiry' });
+
+db.Subject.hasMany(db.Doubt, { foreignKey: 'subjectId', as: 'doubts', onDelete: 'SET NULL' });
+db.Doubt.belongsTo(db.Subject, { foreignKey: 'subjectId', as: 'subject' });
+
+db.User.hasMany(db.Doubt, { foreignKey: 'instructorId', as: 'assignedDoubts', onDelete: 'SET NULL' });
+db.Doubt.belongsTo(db.User, { foreignKey: 'instructorId', as: 'instructor' });
+
+db.User.hasMany(db.Doubt, { foreignKey: 'answeredBy', as: 'answeredDoubts', onDelete: 'SET NULL' });
+db.Doubt.belongsTo(db.User, { foreignKey: 'answeredBy', as: 'responder' });
 
 module.exports = db;

@@ -394,3 +394,181 @@ exports.getStudentAttendance = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to fetch student attendance', error: error.message });
     }
 };
+
+// ============================================================================
+// PRESENTATION ATTENDANCE WORKFLOW (FRD Requirement)
+// - Minimum 1.5h (90 mins) session duration check
+// - Mandatory selfie/photo evidence
+// - Trainer review & approval
+// ============================================================================
+const presentationSubmissions = [
+    {
+        id: 'PRES-001',
+        studentId: 'NQAS-2026-089',
+        studentName: 'Ananya Sharma',
+        batchId: 'NQA-2401-AUTO',
+        batchName: 'SDET Automation Batch 24',
+        subject: 'Page Object Model in Playwright',
+        topic: 'POM & Data-Driven Framework Architecture',
+        durationMinutes: 95,
+        sessionDate: '2026-04-18',
+        evidencePhoto: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400',
+        notes: 'Walked through POM structure, locators encapsulation, and parallel test execution.',
+        status: 'APPROVED',
+        reviewedBy: 'Karthik Raja',
+        reviewedAt: '2026-04-18T16:30:00Z',
+        comments: 'Excellent live demonstration of POM and test runner assertions.',
+        createdAt: '2026-04-18T14:40:00Z',
+    },
+    {
+        id: 'PRES-002',
+        studentId: 'NQAS-2026-092',
+        studentName: 'Rohit Verma',
+        batchId: 'NQA-2401-AUTO',
+        batchName: 'SDET Automation Batch 24',
+        subject: 'RestAssured API Framework',
+        topic: 'Schema validation and OAuth2 integration',
+        durationMinutes: 92,
+        sessionDate: '2026-04-19',
+        evidencePhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
+        notes: 'Demonstrated token exchange and complex JSON schema assertions.',
+        status: 'PENDING',
+        reviewedBy: null,
+        reviewedAt: null,
+        comments: '',
+        createdAt: '2026-04-19T11:20:00Z',
+    }
+];
+
+// Submit presentation attendance
+exports.submitPresentationAttendance = async (req, res) => {
+    try {
+        const { batchId, batchName, subject, topic, durationMinutes, evidencePhoto, notes, studentName, studentId } = req.body;
+        const enquiryId = req.enquiry?.enquiryId || req.user?.userId || studentId || 'NQA-STU-TEMP';
+        const sName = studentName || req.enquiry?.name || req.user?.name || 'Student';
+
+        // FRD Requirement: Presentation attendance requires at least 1.5 hours (90 minutes)
+        const duration = Number(durationMinutes || 0);
+        if (duration < 90) {
+            return res.status(400).json({
+                success: false,
+                message: 'Presentation session duration must be at least 1.5 hours (90 minutes) to be eligible for presentation attendance approval.',
+            });
+        }
+
+        if (!evidencePhoto) {
+            return res.status(400).json({
+                success: false,
+                message: 'Photo evidence (selfie / presentation screenshot) is required for presentation attendance submission.',
+            });
+        }
+
+        const newRecord = {
+            id: `PRES-${Date.now().toString(36).toUpperCase()}`,
+            studentId: enquiryId,
+            studentName: sName,
+            batchId: batchId || 'NQA-BATCH',
+            batchName: batchName || 'Active Batch',
+            subject: subject || 'Technical Presentation',
+            topic: topic || 'Technical Topic Presentation',
+            durationMinutes: duration,
+            sessionDate: new Date().toISOString().split('T')[0],
+            evidencePhoto,
+            notes: notes || '',
+            status: 'PENDING',
+            reviewedBy: null,
+            reviewedAt: null,
+            comments: '',
+            createdAt: new Date().toISOString(),
+        };
+
+        presentationSubmissions.unshift(newRecord);
+
+        return res.status(201).json({
+            success: true,
+            message: 'Presentation attendance submitted successfully. Awaiting trainer approval.',
+            data: newRecord,
+        });
+    } catch (error) {
+        console.error('Error submitting presentation attendance:', error);
+        return res.status(500).json({ success: false, message: 'Failed to submit presentation attendance', error: error.message });
+    }
+};
+
+// Get list of presentation attendances
+exports.getPresentationAttendances = async (req, res) => {
+    try {
+        const { batchId, studentId, status } = req.query;
+        let list = [...presentationSubmissions];
+
+        if (batchId) {
+            list = list.filter(item => String(item.batchId) === String(batchId));
+        }
+        if (studentId) {
+            list = list.filter(item => String(item.studentId) === String(studentId));
+        }
+        if (status) {
+            list = list.filter(item => String(item.status).toLowerCase() === String(status).toLowerCase());
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: list,
+        });
+    } catch (error) {
+        console.error('Error fetching presentation attendances:', error);
+        return res.status(500).json({ success: false, message: 'Failed to fetch presentation attendances', error: error.message });
+    }
+};
+
+// Review presentation attendance (Trainer/Admin)
+exports.reviewPresentationAttendance = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status, comments, reviewerName } = req.body;
+
+        const normalizedStatus = String(status || '').toUpperCase();
+        if (!['APPROVED', 'REJECTED'].includes(normalizedStatus)) {
+            return res.status(400).json({ success: false, message: 'Status must be APPROVED or REJECTED' });
+        }
+
+        const item = presentationSubmissions.find(p => p.id === id);
+        if (!item) {
+            return res.status(404).json({ success: false, message: 'Presentation attendance record not found' });
+        }
+
+        item.status = normalizedStatus;
+        item.comments = comments || (normalizedStatus === 'APPROVED' ? 'Presentation verified and approved.' : 'Presentation criteria not met.');
+        item.reviewedBy = reviewerName || req.user?.name || 'Trainer';
+        item.reviewedAt = new Date().toISOString();
+
+        // If approved, synchronize with database Attendance if valid integers
+        if (normalizedStatus === 'APPROVED' && Number.isInteger(Number(item.studentId)) && Number.isInteger(Number(item.batchId))) {
+            try {
+                const [attRec] = await Attendance.findOrCreate({
+                    where: {
+                        enquiryId: Number(item.studentId),
+                        batchId: Number(item.batchId),
+                    },
+                    defaults: {
+                        attendanceCount: 0,
+                        instructorId: req.user?.userId || null,
+                    }
+                });
+                await attRec.increment('attendanceCount');
+            } catch (dbErr) {
+                console.warn('Could not sync presentation to Attendance table:', dbErr.message);
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `Presentation attendance ${normalizedStatus.toLowerCase()} successfully`,
+            data: item,
+        });
+    } catch (error) {
+        console.error('Error reviewing presentation attendance:', error);
+        return res.status(500).json({ success: false, message: 'Failed to review presentation attendance', error: error.message });
+    }
+};
+

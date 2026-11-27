@@ -132,6 +132,7 @@ const routes = [
   ['attendance', require('./routes/attendance.routes')],
   ['job-posts', require('./routes/jobPost.routes')],
   ['user-placement', require('./routes/userplacementdetails.routes')],
+  ['doubts', require('./routes/doubt.routes')],
 ];
 
 routes.forEach(([path, router]) => {

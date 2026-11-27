@@ -2,12 +2,14 @@
 const db = require('../models');
 const Enquiry = db.Enquiry;
 const Batch = db.Batch;
+const Package = db.Package;
 const Subject = db.Subject;
 const User = db.User;
 
 /**
  * Get all batches for the logged-in student
- * Includes the primary batch (via batchId) and any additional batches (via BatchStudent)
+ * Includes the primary batch (via batchId), any additional batches (via BatchStudent),
+ * and the student's enrolled package / subjects taken.
  */
 exports.getStudentBatches = async (req, res) => {
     try {
@@ -17,49 +19,66 @@ exports.getStudentBatches = async (req, res) => {
             return res.status(400).json({ message: 'Student ID not found in request' });
         }
 
-        // Fetch the student with their primary batch and enrolled batches
+        const makeBatchIncludes = () => [
+            {
+                model: Subject,
+                as: 'subject',
+                attributes: ['id', 'name', 'code', 'image']
+            },
+            {
+                model: User,
+                as: 'instructor',
+                attributes: ['id', 'name', 'email']
+            },
+            {
+                model: User,
+                as: 'creator',
+                attributes: ['id', 'name', 'email']
+            }
+        ];
+
+        // Fetch the student with their primary batch, enrolled batches, and package
         const student = await Enquiry.findByPk(enquiryId, {
             include: [
                 {
                     model: Batch,
                     as: 'batch', // Primary batch
-                    include: [
-                        {
-                            model: Subject,
-                            as: 'subject',
-                            attributes: ['id', 'name', 'code', 'image']
-                        },
-                        {
-                            model: User,
-                            as: 'instructor',
-                            attributes: ['id', 'name', 'email']
-                        }
-                    ]
+                    include: makeBatchIncludes()
                 },
                 {
                     model: Batch,
                     as: 'enrolledBatches', // Batches via many-to-many
-                    include: [
-                        {
-                            model: Subject,
-                            as: 'subject',
-                            attributes: ['id', 'name', 'code', 'image']
-                        },
-                        {
-                            model: User,
-                            as: 'instructor',
-                            attributes: ['id', 'name', 'email']
-                        }
-                    ],
+                    include: makeBatchIncludes(),
                     through: {
                         attributes: [] // Don't include join table data
                     }
+                },
+                {
+                    model: Package,
+                    as: 'package',
+                    attributes: ['id', 'name', 'image'],
+                    include: [
+                        {
+                            model: Subject,
+                            as: 'subjects',
+                            through: { attributes: [] },
+                            attributes: ['id', 'name', 'code', 'image']
+                        }
+                    ]
                 }
             ]
         });
 
         if (!student) {
             return res.status(404).json({ message: 'Student not found' });
+        }
+
+        let individualSubjects = [];
+        if (Array.isArray(student.subjectIds) && student.subjectIds.length > 0) {
+            individualSubjects = await Subject.findAll({
+                where: { id: student.subjectIds },
+                attributes: ['id', 'name', 'code', 'image']
+            });
         }
 
         // Combine primary batch and enrolled batches into a single list
@@ -81,7 +100,11 @@ exports.getStudentBatches = async (req, res) => {
         res.status(200).json({
             success: true,
             count: allBatches.length,
-            data: allBatches
+            data: allBatches,
+            enrollment: {
+                package: student.package || null,
+                individualSubjects,
+            }
         });
 
     } catch (error) {
